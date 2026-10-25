@@ -1,0 +1,258 @@
+@import "tailwindcss";
+@import 'leaflet/dist/leaflet.css';
+
+@layer base {
+  body {
+    background-color: #FAF7F2;
+    color: #2D3748;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+}
+
+/* Enhanced 3D Claymorphism (Efek Timbul) */
+.clay-box {
+  background: #FFFFFF;
+  border-radius: 28px;
+  box-shadow: 
+    0 14px 28px -4px rgba(160, 130, 110, 0.12),
+    0 4px 10px -2px rgba(160, 130, 110, 0.06),
+    inset 0 3px 6px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -3px 6px 0 rgba(0, 0, 0, 0.03);
+  border: 1px solid #ECE5DA;
+}
+
+.clay-box-sm {
+  background: #FFFFFF;
+  border-radius: 20px;
+  box-shadow: 
+    0 8px 18px -3px rgba(160, 130, 110, 0.1),
+    0 2px 6px -1px rgba(160, 130, 110, 0.05),
+    inset 0 2px 4px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -2px 4px 0 rgba(0, 0, 0, 0.02);
+  border: 1px solid #ECE5DA;
+}
+
+.clay-sidebar {
+  background: #E4EFE7;
+  border-radius: 32px;
+  box-shadow: 
+    0 16px 36px -4px rgba(45, 106, 79, 0.1),
+    0 6px 14px -2px rgba(45, 106, 79, 0.05),
+    inset 0 3px 6px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -3px 6px 0 rgba(45, 106, 79, 0.06);
+  border: 1px solid #D2E4D6;
+}
+
+.clay-banner-peach {
+  background: linear-gradient(135deg, #FEECE3 0%, #FED9C9 100%);
+  border-radius: 30px;
+  box-shadow: 
+    0 16px 36px -6px rgba(233, 118, 83, 0.2),
+    0 6px 14px -2px rgba(233, 118, 83, 0.1),
+    inset 0 3px 6px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -3px 6px 0 rgba(188, 84, 75, 0.08);
+  border: 1px solid #FED0BD;
+}
+
+.clay-metric-mint {
+  background: #E6F3EC;
+  border-radius: 24px;
+  box-shadow: 
+    0 12px 24px -4px rgba(45, 106, 79, 0.14),
+    0 4px 10px -2px rgba(45, 106, 79, 0.06),
+    inset 0 3px 6px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -2px 4px 0 rgba(45, 106, 79, 0.06);
+  border: 1px solid #CEE9DA;
+}
+
+.clay-metric-peach {
+  background: #FEEFE9;
+  border-radius: 24px;
+  box-shadow: 
+    0 12px 24px -4px rgba(188, 84, 75, 0.14),
+    0 4px 10px -2px rgba(188, 84, 75, 0.06),
+    inset 0 3px 6px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -2px 4px 0 rgba(188, 84, 75, 0.06);
+  border: 1px solid #FCD5C8;
+}
+
+.clay-metric-honey {
+  background: #FEF6E1;
+  border-radius: 24px;
+  box-shadow: 
+    0 12px 24px -4px rgba(180, 121, 30, 0.14),
+    0 4px 10px -2px rgba(180, 121, 30, 0.06),
+    inset 0 3px 6px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -2px 4px 0 rgba(180, 121, 30, 0.06);
+  border: 1px solid #FCE2A9;
+}
+
+.clay-metric-blue {
+  background: #E9F1FE;
+  border-radius: 24px;
+  box-shadow: 
+    0 12px 24px -4px rgba(41, 86, 155, 0.14),
+    0 4px 10px -2px rgba(41, 86, 155, 0.06),
+    inset 0 3px 6px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -2px 4px 0 rgba(41, 86, 155, 0.06);
+  border: 1px solid #CDE0FD;
+}
+
+.clay-pill-active {
+  background: #FFFFFF;
+  box-shadow: 
+    0 8px 18px -2px rgba(0, 0, 0, 0.06),
+    inset 0 2px 4px 0 rgba(255, 255, 255, 1),
+    inset 0 -2px 3px 0 rgba(0, 0, 0, 0.03);
+  border: 1px solid #FFFFFF;
+}
+
+.clay-btn-coral {
+  background: #E97653;
+  color: #FFFFFF;
+  box-shadow: 
+    0 8px 18px -2px rgba(233, 118, 83, 0.45),
+    inset 0 2px 3px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -2px 3px 0 rgba(0, 0, 0, 0.15);
+  border: 1px solid #EA7E5D;
+  transition: all 0.2s ease;
+}
+.clay-btn-coral:hover {
+  background: #DC6945;
+  box-shadow: 
+    0 5px 12px -2px rgba(233, 118, 83, 0.5),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.4);
+  transform: translateY(1px);
+}
+
+.clay-btn-white {
+  background: #FFFFFF;
+  color: #334155;
+  box-shadow: 
+    0 6px 14px -2px rgba(0, 0, 0, 0.06),
+    inset 0 2px 3px 0 rgba(255, 255, 255, 1),
+    inset 0 -2px 3px 0 rgba(0, 0, 0, 0.03);
+  border: 1px solid #ECE7DE;
+  transition: all 0.2s ease;
+}
+.clay-btn-white:hover {
+  background: #FFFDF9;
+  box-shadow: 
+    0 4px 10px -2px rgba(0, 0, 0, 0.08);
+  transform: translateY(1px);
+}
+
+/* Custom Leaflet Map DivIcons (Foto & Nama Siswa, Titik Sekolah Mencolok) */
+.leaflet-student-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.clay-student-pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+}
+.clay-student-pin:hover {
+  transform: scale(1.18) translateY(-4px);
+  z-index: 9999 !important;
+}
+.pin-avatar-wrap {
+  position: relative;
+}
+.pin-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 9999px;
+  border: 3px solid #FFFFFF;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18), inset 0 2px 2px rgba(255, 255, 255, 0.8);
+  overflow: hidden;
+  background: #E6F4EA;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pin-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pin-initials {
+  background: linear-gradient(135deg, #059669, #0D9488);
+  color: white;
+  font-weight: 800;
+  font-size: 12px;
+}
+.pin-status-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: #10B981;
+  border: 2px solid white;
+}
+.pin-label {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(4px);
+  color: #1E293B;
+  font-weight: 800;
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  margin-top: 2px;
+  white-space: nowrap;
+  max-width: 88px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+}
+
+/* School Standout Pin */
+.leaflet-school-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+.clay-school-pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: schoolFloat 2.5s ease-in-out infinite;
+  filter: drop-shadow(0 6px 12px rgba(217, 119, 6, 0.45));
+  cursor: pointer;
+}
+@keyframes schoolFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.school-pin-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+  border: 3.5px solid #FFFFFF;
+  box-shadow: 
+    0 8px 16px rgba(217, 119, 6, 0.4),
+    inset 0 3px 4px rgba(255, 255, 255, 0.7),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.school-pin-label {
+  background: #0F172A;
+  color: #FEF3C7;
+  font-weight: 800;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+  margin-top: 2px;
+  white-space: nowrap;
+  border: 1.5px solid #F59E0B;
+}

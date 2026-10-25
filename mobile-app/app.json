@@ -1,0 +1,70 @@
+{
+  "expo": {
+    "name": "AKTIVITAS.KU",
+    "slug": "mobile-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "mobileapp",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/expo.icon"
+    },
+    "android": {
+      "package": "com.budiutomo.aktivitasku",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#208AEF",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "color": "#2563eb",
+          "defaultChannel": "kaih-reminders"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "reactNativeArchitectures": "armeabi-v7a,arm64-v8a",
+            "jvmargs": "-Xmx4096m -XX:MaxMetaspaceSize=1024m",
+            "newArchEnabled": false
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false,
+      "reactCompiler": false
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c5b743e8-99b1-4880-9f9f-1b3b6a25da85"
+      },
+      "router": {}
+    },
+    "owner": "pkhbinjai"
+  }
+}

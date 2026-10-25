@@ -1,0 +1,14 @@
+# Ignore generated native folders (EAS will regenerate them via prebuild)
+/android
+/ios
+
+# Ignore dev-only files
+check_*.js
+scratch.js
+test-fetch.js
+patch_ngrok.js
+dist/
+.claude/
+.vscode/
+AGENTS.md
+CLAUDE.md
