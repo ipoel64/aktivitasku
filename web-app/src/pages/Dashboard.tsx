@@ -216,11 +216,17 @@ function FlyToLocation({ targetLoc }: { targetLoc: { lat: number; lng: number } 
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'feed' | 'attendance' | 'students' | 'map' | 'profile'>('dashboard');
+  const [allActivitiesRaw, setAllActivitiesRaw] = useState<any[]>([]);
+  const [allStudentsRaw, setAllStudentsRaw] = useState<any[]>([]);
   const [activities, setActivities] = useState<any[]>([]);
   const [filteredActivities, setFilteredActivities] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [teacherProfile, setTeacherProfile] = useState<{ full_name: string; email?: string; photo_url?: string } | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string>('guru');
+  const [teacherAssignedClasses, setTeacherAssignedClasses] = useState<string[]>([]);
+  const [teacherSubjects, setTeacherSubjects] = useState<string>('');
+  const [activeClassScope, setActiveClassScope] = useState<string>('ALL_ASSIGNED');
 
   // Feed Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -313,22 +319,100 @@ export default function Dashboard() {
     }
   }, [selectedDate, activeTab]);
 
+  // Filter students & activities by the logged-in teacher's assigned classes (Requirement 4)
+  useEffect(() => {
+    const isRestrictedTeacher =
+      currentUserRole === 'guru' &&
+      teacherAssignedClasses.length > 0 &&
+      !teacherAssignedClasses.includes('SEMUA_KELAS');
+
+    let scopedStudents = allStudentsRaw;
+
+    if (isRestrictedTeacher) {
+      const targetClasses =
+        activeClassScope === 'ALL_ASSIGNED'
+          ? teacherAssignedClasses.map((c) => c.trim().toLowerCase())
+          : [activeClassScope.trim().toLowerCase()];
+
+      scopedStudents = allStudentsRaw.filter((s) =>
+        targetClasses.includes(String(s.kelas || '').trim().toLowerCase())
+      );
+    } else if (activeClassScope !== 'ALL_ASSIGNED') {
+      scopedStudents = allStudentsRaw.filter(
+        (s) => String(s.kelas || '').trim().toLowerCase() === activeClassScope.trim().toLowerCase()
+      );
+    }
+
+    const allowedStudentIds = new Set(scopedStudents.map((s) => String(s.id)));
+
+    const scopedActivities =
+      isRestrictedTeacher || activeClassScope !== 'ALL_ASSIGNED'
+        ? allActivitiesRaw.filter((a) => {
+            const sid = String(a.student_id || a.students?.id || '');
+            return allowedStudentIds.has(sid);
+          })
+        : allActivitiesRaw;
+
+    setStudents(scopedStudents);
+    setActivities(scopedActivities);
+
+    const realizedActs = scopedActivities.filter((a) => a.kaihStatus === 'REALISASI');
+    const plannedActs = scopedActivities.filter((a) => a.kaihStatus === 'RENCANA');
+    const evaluated = realizedActs.filter((a) => (a.evaluations || []).length > 0).length;
+
+    setStats({
+      total: scopedActivities.length,
+      realized: realizedActs.length,
+      planned: plannedActs.length,
+      evaluated,
+      pending: Math.max(0, realizedActs.length - evaluated),
+    });
+  }, [allStudentsRaw, allActivitiesRaw, currentUserRole, teacherAssignedClasses, activeClassScope]);
+
   const fetchData = async () => {
     setLoading(true);
 
-    // 1. Fetch Logged-in Teacher Info
+    // 1. Fetch Logged-in Teacher Info + Assigned Classes
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { data: prof } = await supabase
-          .from('user_profiles')
-          .select('full_name, photo_url')
-          .eq('user_id', user.id)
-          .maybeSingle();
+        const [{ data: userRow }, { data: prof }] = await Promise.all([
+          supabase.from('users').select('role').eq('id', user.id).maybeSingle(),
+          supabase.from('user_profiles').select('id, full_name, photo_url').eq('user_id', user.id).maybeSingle(),
+        ]);
+
+        const roleStr = userRow?.role || 'guru';
+        setCurrentUserRole(roleStr);
 
         if (prof) {
           setTeacherProfile({ full_name: prof.full_name || 'Bapak/Ibu Guru', email: user.email, photo_url: prof.photo_url });
           setProfileForm(prev => ({ ...prev, fullName: prof.full_name || '', photoUrl: prof.photo_url || '' }));
+
+          if (roleStr === 'guru' && prof.id) {
+            const { data: tRow } = await supabase
+              .from('teachers')
+              .select('subjects, position, certifications')
+              .eq('profile_id', prof.id)
+              .maybeSingle();
+
+            if (tRow) {
+              setTeacherSubjects(tRow.subjects || '');
+              let parsedClasses: string[] = [];
+              try {
+                if (tRow.certifications) {
+                  const parsed = JSON.parse(tRow.certifications);
+                  if (Array.isArray(parsed?.assigned_classes)) {
+                    parsedClasses = parsed.assigned_classes;
+                  }
+                }
+              } catch {
+                if (typeof tRow.certifications === 'string' && tRow.certifications.trim()) {
+                  parsedClasses = tRow.certifications.split(',').map((s: string) => s.trim()).filter(Boolean);
+                }
+              }
+              setTeacherAssignedClasses(parsedClasses);
+            }
+          }
         } else {
           setTeacherProfile({ full_name: user.email?.split('@')[0] || 'Bapak/Ibu Guru', email: user.email });
           setProfileForm(prev => ({ ...prev, fullName: user.email?.split('@')[0] || '' }));
@@ -360,19 +444,7 @@ export default function Dashboard() {
         return { ...act, evaluations: evals };
       });
       const mergedActs = parseAndDeduplicateWebActivities(rawMerged);
-
-      setActivities(mergedActs);
-
-      const realizedActs = mergedActs.filter(a => a.kaihStatus === 'REALISASI');
-      const plannedActs = mergedActs.filter(a => a.kaihStatus === 'RENCANA');
-      const evaluated = realizedActs.filter(a => a.evaluations.length > 0).length;
-      setStats({
-        total: mergedActs.length,
-        realized: realizedActs.length,
-        planned: plannedActs.length,
-        evaluated: evaluated,
-        pending: Math.max(0, realizedActs.length - evaluated)
-      });
+      setAllActivitiesRaw(mergedActs);
     } else if (actError) {
       console.error(actError);
     }
@@ -551,7 +623,7 @@ export default function Dashboard() {
       }
     }
 
-    setStudents(studentList);
+    setAllStudentsRaw(studentList);
     await fetchAttendanceForDate(selectedDate);
     setLoading(false);
   };
@@ -1639,8 +1711,38 @@ export default function Dashboard() {
                 Hi, {teacherProfile?.full_name || 'guru1!'} ☀️
               </h2>
               <p className="text-[10px] text-slate-500 font-medium mt-0.5">
-                Guru Wali Kelas & Pengajar
+                {currentUserRole === 'admin'
+                  ? 'Super Administrator (Akses Semua Kelas)'
+                  : teacherSubjects
+                  ? `Pengajar: ${teacherSubjects}`
+                  : 'Guru Wali Kelas & Pengajar'}
               </p>
+              {currentUserRole === 'guru' && (
+                <div className="mt-1.5 flex flex-wrap justify-center gap-1">
+                  {teacherAssignedClasses.length === 0 || teacherAssignedClasses.includes('SEMUA_KELAS') ? (
+                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                      Kelas Ajar: Semua Kelas
+                    </span>
+                  ) : (
+                    teacherAssignedClasses.map((cls) => (
+                      <span
+                        key={cls}
+                        className="text-[9px] font-extrabold bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full border border-teal-200"
+                      >
+                        {cls}
+                      </span>
+                    ))
+                  )}
+                </div>
+              )}
+              {currentUserRole === 'admin' && (
+                <a
+                  href="/admin"
+                  className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold shadow-xs transition-colors"
+                >
+                  <span>🛡️ Kembali ke Panel Admin</span>
+                </a>
+              )}
             </div>
 
             {/* Navigation Menu (Puffy Clay Pills) */}
@@ -1759,7 +1861,8 @@ export default function Dashboard() {
         
         {/* Top Header Bar */}
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <img src="/kaih_logo.png" alt="7 KAIH" className="w-7 h-7 object-contain" />
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
               {activeTab === 'dashboard' ? 'Dashboard'
                 : activeTab === 'feed' ? 'Aktivitas Siswa'
@@ -1769,8 +1872,52 @@ export default function Dashboard() {
                 : 'Profil Saya'}
             </h1>
             <span className="bg-[#FEF5D1] text-[#9A7314] font-black text-[10px] px-2.5 py-0.5 rounded-full border border-[#FBE69B] shadow-2xs uppercase tracking-wide">
-              GURU KELAS
+              {currentUserRole === 'admin' ? 'SUPER ADMIN' : 'GURU KELAS'}
             </span>
+
+            {/* Class Filter Switcher for Guru's Assigned Classes */}
+            {(() => {
+              const availableScopeClasses =
+                currentUserRole === 'guru' &&
+                teacherAssignedClasses.length > 0 &&
+                !teacherAssignedClasses.includes('SEMUA_KELAS')
+                  ? teacherAssignedClasses
+                  : Array.from(new Set(allStudentsRaw.map((s) => s.kelas).filter(Boolean)));
+
+              return (
+                <div className="flex items-center gap-1.5 flex-wrap ml-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveClassScope('ALL_ASSIGNED')}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                      activeClassScope === 'ALL_ASSIGNED'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-emerald-50'
+                    }`}
+                  >
+                    {currentUserRole === 'guru' &&
+                    teacherAssignedClasses.length > 0 &&
+                    !teacherAssignedClasses.includes('SEMUA_KELAS')
+                      ? `Semua Kelas Ajar Saya (${teacherAssignedClasses.length})`
+                      : `Semua Kelas (${allStudentsRaw.length} Siswa)`}
+                  </button>
+                  {availableScopeClasses.map((cls) => (
+                    <button
+                      key={cls}
+                      type="button"
+                      onClick={() => setActiveClassScope(cls)}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                        activeClassScope === cls
+                          ? 'bg-teal-600 text-white border-teal-600 shadow-2xs'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-teal-50'
+                      }`}
+                    >
+                      {cls}
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Mobile Tab Pill Scroller */}

@@ -65,7 +65,7 @@ function App() {
         <Route 
           path="/dashboard" 
           element={
-            session && role === 'guru' ? (
+            session && ['guru', 'admin', 'kepsek', 'yayasan'].includes(role || '') ? (
               <Dashboard />
             ) : (
               <Navigate to="/" replace />
