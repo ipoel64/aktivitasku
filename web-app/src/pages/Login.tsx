@@ -132,12 +132,12 @@ export default function Login() {
 
   return (
     <div
-      className={`min-h-screen w-full flex flex-col lg:flex-row overflow-x-hidden select-none ${
-        darkMode ? 'bg-slate-950 text-slate-100' : 'bg-white text-slate-800'
+      className={`min-h-screen w-full flex flex-col lg:flex-row overflow-x-hidden select-none transition-colors duration-300 ${
+        darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'
       }`}
     >
-      {/* LEFT HERO SECTION (Dynamic 7 KAIH Gallery with Glassmorphism Overlay) */}
-      <div className="relative lg:w-[56%] xl:w-[57%] min-h-[440px] lg:min-h-screen flex flex-col justify-between p-6 sm:p-10 lg:p-12 overflow-hidden">
+      {/* ================= LEFT HERO SECTION (Ultra Glossy 7 KAIH Glassmorphism) ================= */}
+      <div className="relative lg:w-[56%] xl:w-[57%] min-h-[460px] lg:min-h-screen flex flex-col justify-between p-6 sm:p-10 lg:p-12 overflow-hidden">
         {/* Background Images with Smooth Crossfade */}
         {slides.map((slide, idx) => (
           <div
@@ -149,94 +149,107 @@ export default function Login() {
           />
         ))}
 
-        {/* Dark Gradient Overlay for Maximum Readability */}
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-900/70 to-slate-900/40 pointer-events-none" />
+        {/* Cinematic Gradient Overlays with Specular Tint */}
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-900/60 to-slate-900/30 pointer-events-none" />
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-slate-950/30 pointer-events-none" />
 
-        {/* Top Bar inside Hero: Habit Pill & Dark Mode Button */}
+        {/* Ambient Glossy Glow Blobs on Hero */}
+        <div className="absolute top-1/4 -left-20 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-10 left-1/3 w-96 h-96 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Top Bar inside Hero: Glossy Habit Pill & Glossy Dark Mode Button */}
         <div className="relative z-10 flex items-center justify-between gap-4">
-          <div className="inline-flex items-center gap-2 bg-emerald-500/20 backdrop-blur-md border border-emerald-400/30 text-emerald-200 px-3.5 py-1.5 rounded-full text-xs font-semibold tracking-wide">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            {currentSlide.habit}
+          <div className="inline-flex items-center gap-2 bg-emerald-500/25 hover:bg-emerald-500/35 backdrop-blur-2xl border border-emerald-300/40 text-emerald-100 px-4 py-2 rounded-full text-xs font-bold tracking-wide shadow-[0_8px_25px_rgba(16,185,129,0.3)] ring-1 ring-white/20 transition-all">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-300 shadow-[0_0_10px_#6ee7b7] animate-pulse" />
+            <span>{currentSlide.habit}</span>
           </div>
 
           <button
             type="button"
             onClick={() => setDarkMode(!darkMode)}
-            className="inline-flex items-center gap-2 bg-white/95 hover:bg-white text-slate-800 px-4 py-2 rounded-full shadow-lg text-xs font-bold transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 bg-white/25 hover:bg-white/40 active:bg-white/50 backdrop-blur-2xl border border-white/40 text-white px-4 py-2 rounded-full shadow-[0_8px_25px_rgba(0,0,0,0.3)] ring-1 ring-white/30 text-xs font-bold transition-all cursor-pointer"
           >
             {darkMode ? (
               <>
-                <Sun className="w-3.5 h-3.5 text-amber-500" />
-                Mode Terang
+                <Sun className="w-3.5 h-3.5 text-amber-300" />
+                <span>Mode Terang</span>
               </>
             ) : (
               <>
-                <Moon className="w-3.5 h-3.5 text-slate-700" />
-                Mode Gelap
+                <Moon className="w-3.5 h-3.5 text-sky-200" />
+                <span>Mode Gelap</span>
               </>
             )}
           </button>
         </div>
 
-        {/* Center-Left Welcome Glass Card + 3 Feature Badges */}
+        {/* Center-Left Welcome Card (Ultra Glossy Glass with Specular Sheen) */}
         <div className="relative z-10 my-8 lg:my-auto max-w-xl">
-          <div className="bg-slate-900/75 backdrop-blur-md border border-white/15 rounded-2xl p-6 sm:p-8 shadow-2xl">
-            <h1 className="text-2xl sm:text-3xl lg:text-[34px] font-extrabold text-white tracking-tight leading-tight flex items-center gap-2.5 flex-wrap">
+          <div className="relative overflow-hidden bg-slate-950/40 backdrop-blur-2xl border border-white/30 rounded-[28px] p-7 sm:p-9 shadow-[0_25px_60px_-10px_rgba(0,0,0,0.65)] ring-1 ring-white/20">
+            {/* Specular glossy highlight along top edge */}
+            <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white/25 via-white/5 to-transparent pointer-events-none" />
+
+            <h1 className="relative text-2xl sm:text-3xl lg:text-[34px] font-extrabold text-white tracking-tight leading-tight flex items-center gap-2.5 flex-wrap drop-shadow-md">
               <span>{config.heroTitle}</span>
             </h1>
-            <p className="mt-3.5 text-sm sm:text-[15px] text-slate-200/95 leading-relaxed font-normal">
+            <p className="relative mt-3.5 text-sm sm:text-[15px] text-slate-100/95 leading-relaxed font-normal drop-shadow-sm">
               {config.heroSubtitle}
             </p>
           </div>
 
-          {/* 3 Feature Pills */}
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-slate-900/75 backdrop-blur-md border border-white/15 flex items-center justify-center text-white shrink-0 shadow-md">
+          {/* 3 Glossy Feature Cards */}
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div className="relative overflow-hidden bg-slate-950/40 hover:bg-slate-950/55 backdrop-blur-2xl border border-white/25 rounded-2xl p-3.5 shadow-[0_12px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/15 transition-all hover:scale-[1.02] flex items-center gap-3">
+              <div className="absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-white/15 to-transparent pointer-events-none" />
+              <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur-xl border border-white/30 flex items-center justify-center text-white shrink-0 shadow-inner">
                 <Users className="w-5 h-5 text-sky-300" />
               </div>
-              <div className="text-xs sm:text-[13px] font-semibold text-white leading-snug drop-shadow">
+              <div className="text-xs sm:text-[13px] font-bold text-white leading-snug drop-shadow-sm">
                 {config.feature1}
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-slate-900/75 backdrop-blur-md border border-white/15 flex items-center justify-center text-white shrink-0 shadow-md">
+            <div className="relative overflow-hidden bg-slate-950/40 hover:bg-slate-950/55 backdrop-blur-2xl border border-white/25 rounded-2xl p-3.5 shadow-[0_12px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/15 transition-all hover:scale-[1.02] flex items-center gap-3">
+              <div className="absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-white/15 to-transparent pointer-events-none" />
+              <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur-xl border border-white/30 flex items-center justify-center text-white shrink-0 shadow-inner">
                 <ShieldCheck className="w-5 h-5 text-emerald-300" />
               </div>
-              <div className="text-xs sm:text-[13px] font-semibold text-white leading-snug drop-shadow">
+              <div className="text-xs sm:text-[13px] font-bold text-white leading-snug drop-shadow-sm">
                 {config.feature2}
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-slate-900/75 backdrop-blur-md border border-white/15 flex items-center justify-center text-white shrink-0 shadow-md">
+            <div className="relative overflow-hidden bg-slate-950/40 hover:bg-slate-950/55 backdrop-blur-2xl border border-white/25 rounded-2xl p-3.5 shadow-[0_12px_30px_rgba(0,0,0,0.35)] ring-1 ring-white/15 transition-all hover:scale-[1.02] flex items-center gap-3">
+              <div className="absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-white/15 to-transparent pointer-events-none" />
+              <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur-xl border border-white/30 flex items-center justify-center text-white shrink-0 shadow-inner">
                 <BarChart3 className="w-5 h-5 text-amber-300" />
               </div>
-              <div className="text-xs sm:text-[13px] font-semibold text-white leading-snug drop-shadow">
+              <div className="text-xs sm:text-[13px] font-bold text-white leading-snug drop-shadow-sm">
                 {config.feature3}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Bottom Quote Glass Box */}
+        {/* Bottom Quote Glossy Box */}
         <div className="relative z-10 max-w-md">
-          <div className="bg-slate-900/75 backdrop-blur-md border border-white/15 rounded-2xl px-5 py-3.5 shadow-xl">
-            <p className="text-xs sm:text-[13px] italic text-slate-200 leading-relaxed">
+          <div className="relative overflow-hidden bg-slate-950/40 backdrop-blur-2xl border border-white/25 rounded-2xl px-6 py-4 shadow-[0_15px_35px_rgba(0,0,0,0.45)] ring-1 ring-white/15">
+            <div className="absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-white/15 to-transparent pointer-events-none" />
+            <p className="relative text-xs sm:text-[13px] italic text-slate-100 leading-relaxed drop-shadow-sm">
               "{currentSlide.quote}"
             </p>
-            <div className="mt-2 flex items-center justify-between text-[11px] text-amber-300/90 font-semibold">
+            <div className="relative mt-2.5 flex items-center justify-between text-[11px] text-amber-300 font-bold">
               <span>— {currentSlide.title}</span>
-              <div className="flex gap-1.5">
+              <div className="flex gap-1.5 items-center">
                 {slides.map((s, idx) => (
                   <button
                     key={s.id || idx}
                     type="button"
                     onClick={() => setActiveSlideIndex(idx)}
                     className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                      idx === activeSlideIndex ? 'w-5 bg-amber-400' : 'w-1.5 bg-white/40 hover:bg-white/70'
+                      idx === activeSlideIndex
+                        ? 'w-6 bg-amber-400 shadow-[0_0_10px_#fbbf24]'
+                        : 'w-1.5 bg-white/40 hover:bg-white/80'
                     }`}
                     aria-label={`Slide ${idx + 1}`}
                   />
@@ -247,29 +260,45 @@ export default function Login() {
         </div>
       </div>
 
-      {/* CENTER-RIGHT LOGIN FORM SECTION (Clean Pure White, Zero Grey Canvas) */}
+      {/* ================= CENTER-RIGHT LOGIN SECTION ================= */}
       <div
-        className={`flex-1 flex flex-col justify-center items-center p-6 sm:p-10 lg:p-12 min-h-screen ${
-          darkMode ? 'bg-slate-900' : 'bg-white'
+        className={`relative flex-1 flex flex-col justify-center items-center p-5 sm:p-8 lg:p-10 min-h-screen transition-colors duration-300 ${
+          darkMode
+            ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950'
+            : 'bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20'
         }`}
       >
-        <div className="w-full max-w-[420px]">
-          {/* Logo & Application Header */}
-          <div className="flex items-center gap-3.5 mb-7">
+        {/* Soft Ambient Light Glows behind the Glass Card to emphasize true glossy transparency */}
+        <div className="absolute top-1/4 right-10 w-80 h-80 bg-blue-500/10 dark:bg-blue-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-1/4 left-10 w-80 h-80 bg-purple-500/10 dark:bg-purple-500/15 rounded-full blur-3xl pointer-events-none" />
+
+        {/* KOTAK TRANSPARAN DENGAN SUDUT TUMPUL (PRO-GLOSSY GLASS CARD) */}
+        <div
+          className={`relative z-10 w-full max-w-[430px] rounded-[32px] sm:rounded-[36px] p-7 sm:p-9 transition-all overflow-hidden ${
+            darkMode
+              ? 'bg-slate-900/75 backdrop-blur-2xl border border-white/15 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.7)] ring-1 ring-white/10'
+              : 'bg-white/80 backdrop-blur-2xl border border-white/90 shadow-[0_25px_65px_-12px_rgba(37,99,235,0.14),0_10px_30px_-5px_rgba(0,0,0,0.04)] ring-1 ring-slate-900/5'
+          }`}
+        >
+          {/* Specular Glossy Sheen Highlight on Top Edge */}
+          <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-white/60 dark:from-white/10 to-transparent pointer-events-none rounded-t-[32px] sm:rounded-t-[36px]" />
+
+          {/* Logo & Application Header inside Transparent Card */}
+          <div className="relative flex items-center gap-3.5 mb-7">
             <div className="flex items-center gap-2.5 shrink-0">
               <img
                 src={config.logoKaihUrl || '/kaih_logo.png'}
                 alt="Logo 7 KAIH"
-                className="w-13 h-13 object-contain rounded-full bg-white p-0.5 shadow-sm border border-slate-100"
+                className="w-13 h-13 object-contain rounded-full bg-white/90 backdrop-blur-sm p-0.5 shadow-sm border border-slate-100 dark:border-slate-700"
               />
               {config.logoYaspenUrl ? (
                 <img
                   src={config.logoYaspenUrl}
                   alt="Logo Yayasan Budi Utomo"
-                  className="w-12 h-12 object-contain rounded-full bg-white p-0.5 shadow-sm border border-slate-100"
+                  className="w-12 h-12 object-contain rounded-full bg-white/90 backdrop-blur-sm p-0.5 shadow-sm border border-slate-100 dark:border-slate-700"
                 />
               ) : (
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex flex-col items-center justify-center text-white shadow-sm border-2 border-amber-400">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex flex-col items-center justify-center text-white shadow-md border-2 border-amber-400">
                   <GraduationCap className="w-5 h-5 text-amber-300" />
                   <span className="text-[7.5px] font-black tracking-tighter leading-none mt-0.5">YASPEN</span>
                 </div>
@@ -289,25 +318,29 @@ export default function Login() {
 
           {/* Alerts */}
           {error && (
-            <div className="mb-4 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 p-3 text-xs text-red-700 dark:text-red-300 font-medium leading-relaxed">
+            <div className="relative mb-5 rounded-2xl bg-red-50/90 dark:bg-red-950/70 backdrop-blur-sm border border-red-200 dark:border-red-800/80 p-3.5 text-xs text-red-700 dark:text-red-300 font-medium leading-relaxed shadow-xs">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="relative space-y-4">
             {/* Email / Username Field */}
             <div>
               <label className={`block text-xs font-bold mb-1.5 ${darkMode ? 'text-blue-300' : 'text-[#1E3A8A]'}`}>
                 Email / Username <span className="text-red-500">*</span>
               </label>
               <div
-                className={`flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
-                  darkMode ? 'bg-slate-800 border-slate-700' : 'bg-[#EEF4FF] border-slate-200/90'
+                className={`flex items-center rounded-2xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
+                  darkMode
+                    ? 'bg-slate-800/80 border-slate-700/80 focus-within:bg-slate-800'
+                    : 'bg-[#EEF4FF]/75 border-slate-200/90 focus-within:bg-white shadow-inner'
                 }`}
               >
                 <div
                   className={`w-11 h-11 flex items-center justify-center border-r shrink-0 ${
-                    darkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-200/80 text-slate-500'
+                    darkMode
+                      ? 'bg-slate-800/90 border-slate-700 text-slate-300'
+                      : 'bg-white/80 border-slate-200/80 text-slate-500'
                   }`}
                 >
                   <User className="w-4 h-4" />
@@ -331,13 +364,17 @@ export default function Login() {
                 Password <span className="text-red-500">*</span>
               </label>
               <div
-                className={`flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
-                  darkMode ? 'bg-slate-800 border-slate-700' : 'bg-[#EEF4FF] border-slate-200/90'
+                className={`flex items-center rounded-2xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
+                  darkMode
+                    ? 'bg-slate-800/80 border-slate-700/80 focus-within:bg-slate-800'
+                    : 'bg-[#EEF4FF]/75 border-slate-200/90 focus-within:bg-white shadow-inner'
                 }`}
               >
                 <div
                   className={`w-11 h-11 flex items-center justify-center border-r shrink-0 ${
-                    darkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-200/80 text-slate-500'
+                    darkMode
+                      ? 'bg-slate-800/90 border-slate-700 text-slate-300'
+                      : 'bg-white/80 border-slate-200/80 text-slate-500'
                   }`}
                 >
                   <Lock className="w-4 h-4" />
@@ -357,8 +394,8 @@ export default function Login() {
                   onClick={() => setShowPassword(!showPassword)}
                   className={`w-11 h-11 flex items-center justify-center border-l shrink-0 cursor-pointer transition-colors ${
                     darkMode
-                      ? 'bg-slate-800 border-slate-700 text-blue-400 hover:text-blue-300'
-                      : 'bg-white border-slate-200/80 text-blue-600 hover:bg-slate-50'
+                      ? 'bg-slate-800/90 border-slate-700 text-blue-400 hover:text-blue-300'
+                      : 'bg-white/80 border-slate-200/80 text-blue-600 hover:bg-slate-50'
                   }`}
                   title={showPassword ? 'Sembunyikan Password' : 'Tampilkan Password'}
                 >
@@ -374,8 +411,8 @@ export default function Login() {
               </label>
               <div className="flex items-center gap-2">
                 <div
-                  className={`flex-1 flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
-                    darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
+                  className={`flex-1 flex items-center rounded-2xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
+                    darkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/90 border-slate-200 shadow-inner'
                   }`}
                 >
                   <div className={`pl-3 pr-2 py-2.5 ${darkMode ? 'text-slate-400' : 'text-slate-400'}`}>
@@ -396,7 +433,7 @@ export default function Login() {
 
                 {/* Stylized Captcha Visual Box */}
                 <div
-                  className="relative h-11 px-4 rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-100 via-purple-100 to-blue-100 flex items-center justify-center overflow-hidden shrink-0 shadow-inner"
+                  className="relative h-11 px-4 rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-indigo-100/80 via-purple-100/80 to-blue-100/80 backdrop-blur-sm flex items-center justify-center overflow-hidden shrink-0 shadow-inner"
                   style={{ minWidth: '108px' }}
                   title="Kode Keamanan Visual"
                 >
@@ -426,10 +463,10 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={refreshCaptcha}
-                  className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
+                  className={`w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
                     darkMode
                       ? 'bg-slate-800 border-slate-700 text-blue-400 hover:bg-slate-700'
-                      : 'bg-white border-blue-200 text-blue-600 hover:bg-blue-50'
+                      : 'bg-white/90 border-blue-200 text-blue-600 hover:bg-blue-50 shadow-xs'
                   }`}
                   title="Acak Ulang Kode Keamanan"
                 >
@@ -464,7 +501,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 px-4 rounded-xl bg-[#2563EB] hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm shadow-md shadow-blue-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60"
+              className="w-full py-3.5 px-4 rounded-2xl bg-[#2563EB] hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60 hover:scale-[1.01]"
             >
               {loading ? (
                 <span>Memverifikasi Akun...</span>
@@ -479,10 +516,12 @@ export default function Login() {
         </div>
       </div>
 
-      {/* FAR-RIGHT PHOTO STRIP (Matches vertical photo strip on the right edge) */}
+      {/* ================= FAR-RIGHT PHOTO STRIP ================= */}
       <div
-        className={`hidden lg:flex lg:w-[96px] xl:w-[118px] h-screen flex-col gap-1.5 p-1.5 border-l shrink-0 ${
-          darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+        className={`hidden lg:flex lg:w-[98px] xl:w-[120px] h-screen flex-col gap-1.5 p-2 border-l shrink-0 transition-colors ${
+          darkMode
+            ? 'bg-slate-900/60 backdrop-blur-2xl border-white/10'
+            : 'bg-white/70 backdrop-blur-2xl border-slate-200/80'
         }`}
       >
         {slides.map((slide, idx) => {
@@ -492,8 +531,10 @@ export default function Login() {
               key={slide.id || idx}
               type="button"
               onClick={() => setActiveSlideIndex(idx)}
-              className={`relative flex-1 w-full rounded-lg overflow-hidden group cursor-pointer transition-all ${
-                isActive ? 'ring-2 ring-blue-600 shadow-md' : 'opacity-80 hover:opacity-100'
+              className={`relative flex-1 w-full rounded-2xl overflow-hidden group cursor-pointer transition-all ${
+                isActive
+                  ? 'ring-2 ring-blue-600 shadow-lg scale-[1.02]'
+                  : 'opacity-80 hover:opacity-100 ring-1 ring-white/30'
               }`}
               title={`${slide.habit} — ${slide.title}`}
             >
@@ -507,7 +548,7 @@ export default function Login() {
                   isActive ? 'bg-blue-900/10' : 'bg-slate-950/25 group-hover:bg-slate-950/10'
                 }`}
               />
-              <div className="absolute bottom-1 left-1 right-1 bg-slate-950/75 backdrop-blur-xs text-[9px] text-white font-semibold px-1.5 py-0.5 rounded truncate">
+              <div className="absolute bottom-1 left-1 right-1 bg-slate-950/75 backdrop-blur-md border border-white/15 text-[9px] text-white font-bold px-1.5 py-0.5 rounded-lg truncate">
                 {idx + 1}. {slide.habit.replace(/Kebiasaan [^:]+:\s*/, '')}
               </div>
             </button>
@@ -517,11 +558,11 @@ export default function Login() {
 
       {/* MODAL: LUPA PASSWORD / PANDUAN AKUN */}
       {showHelpModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-700">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-md p-4">
+          <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-2xl rounded-3xl max-w-md w-full p-6 shadow-2xl border border-white/40 dark:border-white/15">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3.5 mb-4">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 flex items-center justify-center">
                   <HelpCircle className="w-5 h-5" />
                 </div>
                 <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
@@ -542,7 +583,7 @@ export default function Login() {
                 Sistem <strong>AKTIVITASKU & 7 KAIH Perguruan Budi Utomo</strong> dikelola secara terpusat oleh{' '}
                 <strong>Administrator Sekolah</strong> demi keamanan data akademik.
               </p>
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-700/60 border border-slate-200/80 dark:border-slate-600 space-y-1.5">
+              <div className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-700/60 border border-slate-200/80 dark:border-slate-600 space-y-1.5">
                 <p className="font-bold text-slate-800 dark:text-white">Ketentuan Login Pengguna:</p>
                 <ul className="list-disc pl-4 space-y-1">
                   <li>
