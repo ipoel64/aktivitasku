@@ -324,13 +324,11 @@ export default function Dashboard() {
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
   const [attSearchTerm, setAttSearchTerm] = useState('');
   const [attFilterStatus, setAttFilterStatus] = useState('Semua');
-  const [attClassFilter, setAttClassFilter] = useState('Semua');
   const [savingStudentId, setSavingStudentId] = useState<string | null>(null);
 
   const resetAttFilters = () => {
     setAttSearchTerm('');
     setAttFilterStatus('Semua');
-    setAttClassFilter('Semua');
   };
 
   useEffect(() => {
@@ -999,7 +997,7 @@ export default function Dashboard() {
   };
 
   const handleMarkAllPresent = () => {
-    const targetStudents = attClassFilter === 'Semua' ? students : filteredAttStudents;
+    const targetStudents = filteredAttStudents;
     setAttendanceRecords(prev => {
       const updated = { ...prev };
       targetStudents.forEach(student => {
@@ -1016,7 +1014,7 @@ export default function Dashboard() {
 
   const handleResetAllAttendance = () => {
     if (isReadOnly) return;
-    const targetStudents = attClassFilter === 'Semua' ? students : filteredAttStudents;
+    const targetStudents = filteredAttStudents;
     const count = targetStudents.length;
     if (!window.confirm(`Reset status absensi untuk ${count} siswa menjadi 'Belum Diabsen'?`)) return;
 
@@ -1222,10 +1220,6 @@ export default function Dashboard() {
 
   const attStats = computeAttendanceStats();
 
-  const availableAttClasses = useMemo(() => {
-    return Array.from(new Set(students.map(s => s.kelas || s.education_level).filter(Boolean))).sort();
-  }, [students]);
-
   const filteredAttStudents = students.filter(s => {
     const matchesSearch = s.name.toLowerCase().includes(attSearchTerm.toLowerCase());
     const recStatus = attendanceRecords[s.id]?.status;
@@ -1235,12 +1229,7 @@ export default function Dashboard() {
     } else if (attFilterStatus !== 'Semua') {
       matchesStatus = recStatus === attFilterStatus;
     }
-    let matchesClass = true;
-    if (attClassFilter !== 'Semua') {
-      const cls = s.kelas || s.education_level || '';
-      matchesClass = cls === attClassFilter;
-    }
-    return matchesSearch && matchesStatus && matchesClass;
+    return matchesSearch && matchesStatus;
   });
 
   const getActivityImageUrl = (act: any) => {
@@ -2989,33 +2978,16 @@ export default function Dashboard() {
                     placeholder="Cari siswa di absensi..."
                     value={attSearchTerm}
                     onChange={(e) => setAttSearchTerm(e.target.value)}
-                    className="px-3 py-1.5 bg-white border border-[#E0DCD3] rounded-xl text-xs font-medium w-full sm:w-52 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                    className="px-3 py-1.5 bg-white border border-[#E0DCD3] rounded-xl text-xs font-medium w-full sm:w-60 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                   />
 
-                  {/* Filter Per-Kelas untuk menentukan kelas mana yang mau diabsen (Issue 1) */}
-                  <div className="flex items-center gap-1.5 bg-white border border-[#E0DCD3] rounded-xl px-2.5 py-1.5 shadow-2xs">
-                    <span className="text-[11px] font-bold text-slate-500">🏫 Kelas:</span>
-                    <select
-                      value={attClassFilter}
-                      onChange={(e) => setAttClassFilter(e.target.value)}
-                      className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
-                    >
-                      <option value="Semua">Semua Kelas ({students.length} Siswa)</option>
-                      {availableAttClasses.map((cls) => (
-                        <option key={cls} value={cls}>
-                          Kelas {cls}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Tombol Reset Filter untuk filter absensi (Issue 1) */}
-                  {(attSearchTerm !== '' || attFilterStatus !== 'Semua' || attClassFilter !== 'Semua') && (
+                  {/* Tombol Reset Filter untuk pencarian & status */}
+                  {(attSearchTerm !== '' || attFilterStatus !== 'Semua') && (
                     <button
                       type="button"
                       onClick={resetAttFilters}
                       className="clay-btn-white px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-rose-600 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                      title="Reset semua pencarian & filter absensi"
+                      title="Reset pencarian & filter absensi"
                     >
                       <RotateCcw size={12} />
                       <span>Reset Filter</span>

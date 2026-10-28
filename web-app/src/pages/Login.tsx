@@ -256,42 +256,46 @@ export default function Login() {
         <div
           className={`relative z-10 w-full max-w-[420px] rounded-[30px] sm:rounded-[34px] p-6 sm:p-8 transition-all overflow-hidden ${
             darkMode
-              ? 'bg-slate-950/40 backdrop-blur-xl border border-white/20 shadow-[0_30px_70px_rgba(0,0,0,0.7)] ring-1 ring-white/15'
-              : 'bg-white/30 backdrop-blur-xl border border-white/50 shadow-[0_30px_70px_rgba(0,0,0,0.35)] ring-1 ring-white/30'
+              ? 'bg-slate-900/85 backdrop-blur-2xl border border-white/20 shadow-[0_30px_70px_rgba(0,0,0,0.7)] ring-1 ring-white/10'
+              : 'bg-white/80 backdrop-blur-2xl border border-white/90 shadow-[0_30px_70px_rgba(0,0,0,0.25)] ring-1 ring-white/50'
           }`}
         >
           {/* Specular Glossy Sheen Highlight on Top Edge */}
-          <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white/40 dark:from-white/15 to-transparent pointer-events-none rounded-t-[30px] sm:rounded-t-[34px]" />
+          <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white/60 dark:from-white/15 to-transparent pointer-events-none rounded-t-[30px] sm:rounded-t-[34px]" />
 
           {/* Logo & Application Header inside Transparent Card */}
           <div className="relative flex items-center gap-3.5 mb-6">
-            <div className="flex items-center gap-2.5 shrink-0">
-              <img
-                src={config.logoKaihUrl || '/kaih_logo.png'}
-                alt="Logo 7 KAIH"
-                className="w-12 h-12 object-contain rounded-full bg-white/80 backdrop-blur-sm p-0.5 shadow-sm border border-white/60 dark:border-slate-700"
-              />
-              {config.logoYaspenUrl ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 p-1 shadow-md border border-slate-200/80 dark:border-slate-700 flex items-center justify-center">
                 <img
-                  src={config.logoYaspenUrl}
-                  alt="Logo Yayasan Budi Utomo"
-                  className="w-11 h-11 object-contain rounded-full bg-white/80 backdrop-blur-sm p-0.5 shadow-sm border border-white/60 dark:border-slate-700"
+                  src={config.logoKaihUrl || '/kaih_logo.png'}
+                  alt="Logo 7 KAIH"
+                  className="w-full h-full object-contain"
                 />
+              </div>
+              {config.logoYaspenUrl ? (
+                <div className="w-11 h-11 rounded-2xl bg-white dark:bg-slate-800 p-1 shadow-md border border-slate-200/80 dark:border-slate-700 flex items-center justify-center">
+                  <img
+                    src={config.logoYaspenUrl}
+                    alt="Logo Yayasan Budi Utomo"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
               ) : (
-                <div className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex flex-col items-center justify-center text-white shadow-md border-2 border-amber-400">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex flex-col items-center justify-center text-white shadow-md border-2 border-amber-400">
                   <GraduationCap className="w-5 h-5 text-amber-300" />
                   <span className="text-[7px] font-black tracking-tighter leading-none mt-0.5">YASPEN</span>
                 </div>
               )}
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-extrabold text-[#2563EB] dark:text-blue-400 tracking-tight leading-none drop-shadow-xs">
+              <h2 className="text-2xl font-black bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-600 dark:from-blue-400 dark:to-indigo-300 bg-clip-text text-transparent tracking-tight leading-none drop-shadow-xs">
                 AKTIVITASKU
               </h2>
-              <p className={`text-[11px] mt-1 leading-snug font-bold ${darkMode ? 'text-slate-300' : 'text-slate-800'}`}>
+              <p className={`text-xs mt-1.5 leading-snug font-bold ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
                 Sistem Pemantauan 7 KAIH & Evaluasi Siswa
                 <br />
-                Perguruan Budi Utomo
+                <span className="text-blue-600 dark:text-blue-400 font-extrabold">Perguruan Budi Utomo</span>
               </p>
             </div>
           </div>
@@ -306,21 +310,21 @@ export default function Login() {
           <form onSubmit={handleLogin} className="relative space-y-4">
             {/* Email / Username Field */}
             <div>
-              <label className={`block text-xs font-black mb-1.5 ${darkMode ? 'text-blue-200' : 'text-slate-900'}`}>
-                Email / Username <span className="text-red-500">*</span>
+              <label className={`block text-xs font-extrabold mb-1.5 ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                Email / Username <span className="text-red-500 font-bold">*</span>
               </label>
               <div
-                className={`flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
+                className={`flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-600 ${
                   darkMode
-                    ? 'bg-slate-900/60 border-white/20 focus-within:bg-slate-900/90'
-                    : 'bg-white/45 border-white/60 focus-within:bg-white/80 shadow-xs'
+                    ? 'bg-slate-800/90 border-slate-700 focus-within:bg-slate-800'
+                    : 'bg-white/95 border-slate-200/90 focus-within:bg-white shadow-xs'
                 }`}
               >
                 <div
                   className={`w-10 h-10 flex items-center justify-center border-r shrink-0 ${
                     darkMode
-                      ? 'bg-slate-800/60 border-white/10 text-slate-300'
-                      : 'bg-white/50 border-white/50 text-slate-700'
+                      ? 'bg-slate-800 border-slate-700 text-blue-400'
+                      : 'bg-blue-50/70 border-slate-200/80 text-blue-600'
                   }`}
                 >
                   <User className="w-4 h-4" />
@@ -332,7 +336,7 @@ export default function Login() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="contoh: guru1@budiutomo.com"
                   className={`w-full px-3 py-2.5 text-xs sm:text-sm font-bold bg-transparent focus:outline-none select-text ${
-                    darkMode ? 'text-white placeholder-slate-400' : 'text-slate-900 placeholder-slate-500'
+                    darkMode ? 'text-white placeholder-slate-400' : 'text-slate-900 placeholder-slate-400'
                   }`}
                 />
               </div>
@@ -340,21 +344,21 @@ export default function Login() {
 
             {/* Password Field */}
             <div>
-              <label className={`block text-xs font-black mb-1.5 ${darkMode ? 'text-blue-200' : 'text-slate-900'}`}>
-                Password <span className="text-red-500">*</span>
+              <label className={`block text-xs font-extrabold mb-1.5 ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                Password <span className="text-red-500 font-bold">*</span>
               </label>
               <div
-                className={`flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
+                className={`flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-600 ${
                   darkMode
-                    ? 'bg-slate-900/60 border-white/20 focus-within:bg-slate-900/90'
-                    : 'bg-white/45 border-white/60 focus-within:bg-white/80 shadow-xs'
+                    ? 'bg-slate-800/90 border-slate-700 focus-within:bg-slate-800'
+                    : 'bg-white/95 border-slate-200/90 focus-within:bg-white shadow-xs'
                 }`}
               >
                 <div
                   className={`w-10 h-10 flex items-center justify-center border-r shrink-0 ${
                     darkMode
-                      ? 'bg-slate-800/60 border-white/10 text-slate-300'
-                      : 'bg-white/50 border-white/50 text-slate-700'
+                      ? 'bg-slate-800 border-slate-700 text-blue-400'
+                      : 'bg-blue-50/70 border-slate-200/80 text-blue-600'
                   }`}
                 >
                   <Lock className="w-4 h-4" />
@@ -366,7 +370,7 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
                   className={`w-full px-3 py-2.5 text-xs sm:text-sm font-bold bg-transparent focus:outline-none select-text ${
-                    darkMode ? 'text-white placeholder-slate-400' : 'text-slate-900 placeholder-slate-500'
+                    darkMode ? 'text-white placeholder-slate-400' : 'text-slate-900 placeholder-slate-400'
                   }`}
                 />
                 <button
@@ -374,8 +378,8 @@ export default function Login() {
                   onClick={() => setShowPassword(!showPassword)}
                   className={`w-10 h-10 flex items-center justify-center border-l shrink-0 cursor-pointer transition-colors ${
                     darkMode
-                      ? 'bg-slate-800/60 border-white/10 text-blue-400 hover:text-blue-300'
-                      : 'bg-white/50 border-white/50 text-blue-700 hover:bg-white/70'
+                      ? 'bg-slate-800 border-slate-700 text-slate-400 hover:text-blue-400'
+                      : 'bg-slate-50 hover:bg-slate-100 border-slate-200/80 text-slate-500 hover:text-blue-600'
                   }`}
                   title={showPassword ? 'Sembunyikan Password' : 'Tampilkan Password'}
                 >
@@ -386,16 +390,20 @@ export default function Login() {
 
             {/* Kode Keamanan (Captcha) Field */}
             <div>
-              <label className={`block text-xs font-black mb-1.5 ${darkMode ? 'text-blue-200' : 'text-slate-900'}`}>
-                Kode Keamanan <span className="text-red-500">*</span>
+              <label className={`block text-xs font-extrabold mb-1.5 ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                Kode Keamanan <span className="text-red-500 font-bold">*</span>
               </label>
               <div className="flex items-center gap-2">
                 <div
-                  className={`flex-1 flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
-                    darkMode ? 'bg-slate-900/60 border-white/20' : 'bg-white/50 border-white/60 shadow-xs'
+                  className={`flex-1 flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-600 ${
+                    darkMode ? 'bg-slate-800/90 border-slate-700' : 'bg-white/95 border-slate-200/90 shadow-xs'
                   }`}
                 >
-                  <div className={`pl-2.5 pr-1.5 py-2 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                  <div
+                    className={`w-10 h-10 flex items-center justify-center border-r shrink-0 ${
+                      darkMode ? 'bg-slate-800 border-slate-700 text-blue-400' : 'bg-blue-50/70 border-slate-200/80 text-blue-600'
+                    }`}
+                  >
                     <Shield className="w-4 h-4" />
                   </div>
                   <input
@@ -405,26 +413,30 @@ export default function Login() {
                     value={captchaInput}
                     onChange={(e) => setCaptchaInput(e.target.value)}
                     placeholder="huruf/angka"
-                    className={`w-full pr-2.5 py-2 text-xs sm:text-sm font-black tracking-wider bg-transparent focus:outline-none select-text ${
-                      darkMode ? 'text-white placeholder-slate-400' : 'text-slate-900 placeholder-slate-500'
+                    className={`w-full px-3 py-2 text-xs sm:text-sm font-black tracking-wider bg-transparent focus:outline-none select-text ${
+                      darkMode ? 'text-white placeholder-slate-400' : 'text-slate-900 placeholder-slate-400'
                     }`}
                   />
                 </div>
 
                 {/* Stylized Captcha Visual Box */}
                 <div
-                  className="relative h-10 px-3.5 rounded-xl border border-white/40 bg-gradient-to-r from-white/50 via-purple-100/40 to-blue-100/50 backdrop-blur-md flex items-center justify-center overflow-hidden shrink-0 shadow-xs"
+                  className={`relative h-10 px-3.5 rounded-xl border flex items-center justify-center overflow-hidden shrink-0 shadow-inner ${
+                    darkMode
+                      ? 'border-indigo-800/80 bg-slate-800 text-indigo-300'
+                      : 'border-blue-200 bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 text-indigo-950'
+                  }`}
                   style={{ minWidth: '100px' }}
                   title="Kode Keamanan Visual"
                 >
-                  <svg className="absolute inset-0 w-full h-full opacity-45 pointer-events-none" viewBox="0 0 110 44">
+                  <svg className="absolute inset-0 w-full h-full opacity-40 pointer-events-none" viewBox="0 0 110 44">
                     <path d="M5 10 Q 35 35, 65 12 T 105 30" stroke="#6366f1" strokeWidth="1.5" fill="none" />
                     <path d="M8 34 Q 45 8, 75 30 T 102 10" stroke="#9333ea" strokeWidth="1.2" fill="none" />
                     <circle cx="25" cy="15" r="2" fill="#4f46e5" />
                     <circle cx="55" cy="32" r="2.5" fill="#7e22ce" />
                     <circle cx="85" cy="18" r="2" fill="#2563eb" />
                   </svg>
-                  <div className="relative z-10 flex items-center gap-1 font-mono text-base font-black tracking-widest text-indigo-950">
+                  <div className="relative z-10 flex items-center gap-1 font-mono text-base font-black tracking-widest">
                     {captchaCode.split('').map((char, i) => (
                       <span
                         key={i}
@@ -445,25 +457,25 @@ export default function Login() {
                   onClick={refreshCaptcha}
                   className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
                     darkMode
-                      ? 'bg-slate-800/80 border-white/10 text-blue-400 hover:bg-slate-700'
-                      : 'bg-white/60 border-white/60 text-blue-700 hover:bg-white/80 shadow-xs'
+                      ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-blue-400'
+                      : 'bg-white hover:bg-slate-50 border-slate-200 text-blue-600 shadow-xs'
                   }`}
                   title="Acak Ulang Kode Keamanan"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <p className={`mt-1 text-[10px] font-semibold ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+              <p className={`mt-1 text-[10px] font-semibold ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                 Huruf kecil dan angka saja, persis 4 karakter, tanpa spasi.
               </p>
             </div>
 
             {/* Links Row: Lupa Password & Info Akun */}
-            <div className="flex items-center justify-center gap-2 pt-0.5 text-xs font-bold text-blue-600 dark:text-blue-400">
+            <div className="flex items-center justify-center gap-2 pt-0.5 text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setShowHelpModal(true)}
-                className="hover:underline cursor-pointer"
+                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline cursor-pointer"
               >
                 Lupa Password?
               </button>
@@ -471,7 +483,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setShowHelpModal(true)}
-                className="hover:underline cursor-pointer"
+                className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline cursor-pointer"
               >
                 Panduan Akun Sekolah
               </button>
@@ -481,13 +493,13 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 rounded-xl bg-[#2563EB] hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs sm:text-sm shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60 hover:scale-[1.01]"
+              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 active:scale-[0.99] text-white font-black text-xs sm:text-sm shadow-lg shadow-blue-600/35 hover:shadow-blue-600/50 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60"
             >
               {loading ? (
                 <span>Memverifikasi Akun...</span>
               ) : (
                 <>
-                  <span>Masuk</span>
+                  <span>Masuk ke Dashboard</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
