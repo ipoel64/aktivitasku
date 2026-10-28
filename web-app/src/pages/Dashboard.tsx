@@ -324,7 +324,14 @@ export default function Dashboard() {
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
   const [attSearchTerm, setAttSearchTerm] = useState('');
   const [attFilterStatus, setAttFilterStatus] = useState('Semua');
+  const [attClassFilter, setAttClassFilter] = useState('Semua');
   const [savingStudentId, setSavingStudentId] = useState<string | null>(null);
+
+  const resetAttFilters = () => {
+    setAttSearchTerm('');
+    setAttFilterStatus('Semua');
+    setAttClassFilter('Semua');
+  };
 
   useEffect(() => {
     fetchData();
@@ -992,15 +999,35 @@ export default function Dashboard() {
   };
 
   const handleMarkAllPresent = () => {
+    const targetStudents = attClassFilter === 'Semua' ? students : filteredAttStudents;
     setAttendanceRecords(prev => {
       const updated = { ...prev };
-      students.forEach(student => {
-        if (!updated[student.id] || !updated[student.id].status) {
+      targetStudents.forEach(student => {
+        updated[student.id] = {
+          ...updated[student.id],
+          status: 'Tepat Waktu',
+          notes: updated[student.id]?.notes || '',
+          time: selectedTime || getCurrentTimeStr()
+        };
+      });
+      return updated;
+    });
+  };
+
+  const handleResetAllAttendance = () => {
+    if (isReadOnly) return;
+    const targetStudents = attClassFilter === 'Semua' ? students : filteredAttStudents;
+    const count = targetStudents.length;
+    if (!window.confirm(`Reset status absensi untuk ${count} siswa menjadi 'Belum Diabsen'?`)) return;
+
+    setAttendanceRecords(prev => {
+      const updated = { ...prev };
+      targetStudents.forEach(student => {
+        if (updated[student.id]) {
           updated[student.id] = {
             ...updated[student.id],
-            status: 'Tepat Waktu',
-            notes: updated[student.id]?.notes || '',
-            time: selectedTime
+            status: '',
+            notes: ''
           };
         }
       });
@@ -1195,6 +1222,10 @@ export default function Dashboard() {
 
   const attStats = computeAttendanceStats();
 
+  const availableAttClasses = useMemo(() => {
+    return Array.from(new Set(students.map(s => s.kelas || s.education_level).filter(Boolean))).sort();
+  }, [students]);
+
   const filteredAttStudents = students.filter(s => {
     const matchesSearch = s.name.toLowerCase().includes(attSearchTerm.toLowerCase());
     const recStatus = attendanceRecords[s.id]?.status;
@@ -1204,7 +1235,12 @@ export default function Dashboard() {
     } else if (attFilterStatus !== 'Semua') {
       matchesStatus = recStatus === attFilterStatus;
     }
-    return matchesSearch && matchesStatus;
+    let matchesClass = true;
+    if (attClassFilter !== 'Semua') {
+      const cls = s.kelas || s.education_level || '';
+      matchesClass = cls === attClassFilter;
+    }
+    return matchesSearch && matchesStatus && matchesClass;
   });
 
   const getActivityImageUrl = (act: any) => {
@@ -2892,12 +2928,26 @@ export default function Dashboard() {
                     <span>👁️ Mode Pemantauan (Hanya Lihat)</span>
                   </div>
                 ) : (
-                  <button
-                    onClick={handleMarkAllPresent}
-                    className="clay-btn-white px-3 py-1.5 font-bold text-xs rounded-xl transition-all cursor-pointer text-emerald-800"
-                  >
-                    ✓ Semua Tepat Waktu
-                  </button>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleMarkAllPresent}
+                      className="clay-btn-white px-3 py-1.5 font-bold text-xs rounded-xl transition-all cursor-pointer text-emerald-800 flex items-center gap-1 shadow-2xs"
+                      title="Setel semua siswa menjadi Tepat Waktu"
+                    >
+                      <CheckCircle size={13} />
+                      <span>Semua Tepat Waktu</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetAllAttendance}
+                      className="clay-btn-white px-3 py-1.5 font-bold text-xs rounded-xl transition-all cursor-pointer text-slate-600 hover:text-rose-600 flex items-center gap-1 shadow-2xs"
+                      title="Kembalikan status presensi menjadi Belum Diabsen"
+                    >
+                      <RotateCcw size={13} />
+                      <span>Reset Pilihan</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -2933,18 +2983,50 @@ export default function Dashboard() {
             {/* Attendance Table */}
             <div className="clay-box-sm overflow-hidden">
               <div className="p-2.5 bg-[#FAF8F5] border-b border-[#ECE7DE] flex flex-wrap justify-between items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Cari siswa di absensi..."
-                  value={attSearchTerm}
-                  onChange={(e) => setAttSearchTerm(e.target.value)}
-                  className="px-3 py-1.5 bg-white border border-[#E0DCD3] rounded-xl text-xs font-medium w-full sm:w-60 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                />
+                <div className="flex flex-wrap items-center gap-2 flex-1">
+                  <input
+                    type="text"
+                    placeholder="Cari siswa di absensi..."
+                    value={attSearchTerm}
+                    onChange={(e) => setAttSearchTerm(e.target.value)}
+                    className="px-3 py-1.5 bg-white border border-[#E0DCD3] rounded-xl text-xs font-medium w-full sm:w-52 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                  />
+
+                  {/* Filter Per-Kelas untuk menentukan kelas mana yang mau diabsen (Issue 1) */}
+                  <div className="flex items-center gap-1.5 bg-white border border-[#E0DCD3] rounded-xl px-2.5 py-1.5 shadow-2xs">
+                    <span className="text-[11px] font-bold text-slate-500">🏫 Kelas:</span>
+                    <select
+                      value={attClassFilter}
+                      onChange={(e) => setAttClassFilter(e.target.value)}
+                      className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+                    >
+                      <option value="Semua">Semua Kelas ({students.length} Siswa)</option>
+                      {availableAttClasses.map((cls) => (
+                        <option key={cls} value={cls}>
+                          Kelas {cls}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Tombol Reset Filter untuk filter absensi (Issue 1) */}
+                  {(attSearchTerm !== '' || attFilterStatus !== 'Semua' || attClassFilter !== 'Semua') && (
+                    <button
+                      type="button"
+                      onClick={resetAttFilters}
+                      className="clay-btn-white px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-rose-600 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                      title="Reset semua pencarian & filter absensi"
+                    >
+                      <RotateCcw size={12} />
+                      <span>Reset Filter</span>
+                    </button>
+                  )}
+                </div>
 
                 <select
                   value={attFilterStatus}
                   onChange={(e) => setAttFilterStatus(e.target.value)}
-                  className="px-2.5 py-1.5 bg-white border border-[#E0DCD3] rounded-xl text-xs font-semibold text-slate-700 focus:outline-none"
+                  className="px-2.5 py-1.5 bg-white border border-[#E0DCD3] rounded-xl text-xs font-semibold text-slate-700 focus:outline-none shrink-0"
                 >
                   <option value="Semua">Semua Status Siswa</option>
                   <option value="Belum Diabsen">Belum Diabsen</option>

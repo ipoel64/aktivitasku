@@ -158,24 +158,17 @@ export default function Login() {
         })}
 
         {/* Global Cinematic Vignette & Gradient Overlay (Allows background to be seen everywhere, including behind the login box) */}
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-950/45 to-slate-950/75 pointer-events-none" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/30 pointer-events-none" />
-        <div className="absolute inset-0 bg-radial from-transparent via-slate-950/20 to-slate-950/50 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/65 via-slate-950/25 to-slate-950/50 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-slate-950/20 pointer-events-none" />
+        <div className="absolute inset-0 bg-radial from-transparent via-slate-950/15 to-slate-950/40 pointer-events-none" />
       </div>
 
-      {/* ================= TOP NAVIGATION BAR (FULL WIDTH, CLEAN & PROFESSIONAL) ================= */}
-      <header className="absolute top-0 inset-x-0 z-30 flex items-center justify-between px-5 sm:px-8 py-4 pointer-events-auto">
-        <div className="inline-flex items-center gap-2 bg-slate-950/45 hover:bg-slate-950/60 backdrop-blur-2xl border border-white/25 text-white px-4 py-1.5 rounded-full text-xs font-bold tracking-wide shadow-[0_6px_20px_rgba(0,0,0,0.3)] ring-1 ring-white/15 transition-all">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse" />
-          <span className="text-emerald-300 font-extrabold">7 KAIH</span>
-          <span className="text-white/40">•</span>
-          <span className="text-slate-100 font-medium truncate max-w-[200px] sm:max-w-xs">{currentSlide.habit}</span>
-        </div>
-
+      {/* ================= TOP-RIGHT: MODE GELAP / TERANG (GESER KE KIRI AGAR TIDAK MENABRAK FOTO STRIP) ================= */}
+      <div className="absolute top-4 right-5 sm:right-8 lg:right-32 xl:right-36 z-30 pointer-events-auto">
         <button
           type="button"
           onClick={() => setDarkMode(!darkMode)}
-          className="inline-flex items-center gap-1.5 bg-slate-950/45 hover:bg-slate-950/60 active:bg-slate-950/80 backdrop-blur-2xl border border-white/25 text-white px-4 py-1.5 rounded-full shadow-[0_6px_20px_rgba(0,0,0,0.3)] ring-1 ring-white/15 text-xs font-bold transition-all cursor-pointer"
+          className="inline-flex items-center gap-1.5 bg-slate-950/40 hover:bg-slate-950/60 active:bg-slate-950/80 backdrop-blur-xl border border-white/20 text-white px-4 py-1.5 rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.3)] ring-1 ring-white/10 text-xs font-bold transition-all cursor-pointer"
         >
           {darkMode ? (
             <>
@@ -189,19 +182,28 @@ export default function Login() {
             </>
           )}
         </button>
-      </header>
+      </div>
 
-      {/* ================= LEFT SECTION: CONSOLIDATED HERO & QUOTE CARD (CLEAN & TIDY) ================= */}
-      <div className="relative z-10 lg:w-[50%] xl:w-[52%] flex flex-col justify-center px-6 sm:px-10 lg:pl-12 lg:pr-6 pt-20 pb-10 min-h-[400px] lg:min-h-screen pointer-events-auto">
-        <div className="max-w-lg w-full">
-          {/* Unified High-End Glossy Hero Card */}
-          <div className="relative overflow-hidden bg-slate-950/45 backdrop-blur-3xl border border-white/30 rounded-3xl p-6 sm:p-8 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] ring-1 ring-white/20 transition-all">
-            {/* Specular Sheen Highlight */}
-            <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/25 via-white/5 to-transparent pointer-events-none rounded-t-3xl" />
+      {/* ================= LEFT SECTION: 7 KAIH, HERO CARD & BOTTOM QUOTE (SEJAJAR & SANGAT TRANSPARAN) ================= */}
+      <div className="relative z-20 lg:w-[48%] xl:w-[50%] flex flex-col justify-between px-5 sm:px-8 lg:pl-10 lg:pr-4 py-5 lg:py-7 min-h-[460px] lg:min-h-screen pointer-events-auto">
+        {/* Top Part: 7 KAIH Pill and Selamat Datang Card right below it */}
+        <div className="space-y-4 max-w-lg">
+          {/* 7 KAIH Indicator Pill (Top Left) */}
+          <div className="inline-flex items-center gap-2 bg-slate-950/40 hover:bg-slate-950/55 backdrop-blur-xl border border-white/20 text-white px-4 py-1.5 rounded-full text-xs font-bold tracking-wide shadow-[0_4px_16px_rgba(0,0,0,0.3)] ring-1 ring-white/10 transition-all">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse" />
+            <span className="text-emerald-300 font-extrabold">7 KAIH</span>
+            <span className="text-white/40">•</span>
+            <span className="text-slate-100 font-medium truncate max-w-[200px] sm:max-w-xs">{currentSlide.habit}</span>
+          </div>
 
-            <div className="relative space-y-4">
+          {/* Selamat Datang di AKTIVITASKU Card (Sejajar di bawah 7 KAIH, Sangat Transparan Glossy) */}
+          <div className="relative overflow-hidden bg-slate-950/20 sm:bg-slate-950/25 backdrop-blur-md border border-white/20 rounded-3xl p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)] ring-1 ring-white/10 transition-all">
+            {/* Top Gloss Highlight */}
+            <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-white/20 via-white/5 to-transparent pointer-events-none rounded-t-3xl" />
+
+            <div className="relative space-y-3">
               {/* Badge Identitas */}
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 border border-white/25 text-[11px] font-bold text-emerald-300">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[11px] font-bold text-emerald-300">
                 <span>Perguruan Budi Utomo Binjai</span>
                 <span>•</span>
                 <span className="text-amber-300 font-semibold">Gerakan Karakter Siswa</span>
@@ -214,51 +216,52 @@ export default function Login() {
               <p className="text-xs sm:text-[13px] text-slate-200/95 leading-relaxed font-normal drop-shadow-sm">
                 {config.heroSubtitle}
               </p>
+            </div>
+          </div>
+        </div>
 
-              {/* Divider */}
-              <div className="pt-2 border-t border-white/15" />
+        {/* Bottom Part: Kalimat Kutipan & Pagination Dots (Pojok Kiri Bawah, Sejajar dengan 7 KAIH di Atasnya, Sangat Transparan) */}
+        <div className="pt-6 lg:pt-0 max-w-lg">
+          <div className="relative overflow-hidden bg-slate-950/25 backdrop-blur-md border border-white/20 rounded-2xl p-4 sm:p-5 shadow-[0_15px_40px_rgba(0,0,0,0.3)] ring-1 ring-white/10 space-y-2">
+            {/* Specular Highlight */}
+            <div className="absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-white/15 to-transparent pointer-events-none rounded-t-2xl" />
 
-              {/* Integrated Slide Quote & Interactive Dots */}
-              <div className="space-y-2 pt-1">
-                <p className="text-xs sm:text-[13px] italic text-amber-200 leading-snug drop-shadow-sm">
-                  "{currentSlide.quote}"
-                </p>
-                <div className="flex items-center justify-between text-[11px] text-white/90 pt-1">
-                  <span className="font-bold text-emerald-300 truncate pr-2">— {currentSlide.title}</span>
-                  <div className="flex gap-1.5 items-center shrink-0">
-                    {slides.map((s, idx) => (
-                      <button
-                        key={s.id || idx}
-                        type="button"
-                        onClick={() => setActiveSlideIndex(idx)}
-                        className={`h-2 rounded-full transition-all cursor-pointer ${
-                          idx === activeSlideIndex
-                            ? 'w-6 bg-amber-400 shadow-[0_0_10px_#fbbf24]'
-                            : 'w-2 bg-white/35 hover:bg-white/80'
-                        }`}
-                        aria-label={`Slide ${idx + 1}`}
-                      />
-                    ))}
-                  </div>
-                </div>
+            <p className="relative text-xs sm:text-[13px] italic text-amber-200 leading-snug drop-shadow-sm font-medium">
+              "{currentSlide.quote}"
+            </p>
+            <div className="relative flex items-center justify-between text-[11px] text-white/90 pt-1 border-t border-white/10">
+              <span className="font-bold text-emerald-300 truncate pr-2">— {currentSlide.title}</span>
+              <div className="flex gap-1.5 items-center shrink-0">
+                {slides.map((s, idx) => (
+                  <button
+                    key={s.id || idx}
+                    type="button"
+                    onClick={() => setActiveSlideIndex(idx)}
+                    className={`h-2 rounded-full transition-all cursor-pointer ${
+                      idx === activeSlideIndex
+                        ? 'w-6 bg-amber-400 shadow-[0_0_10px_#fbbf24]'
+                        : 'w-2 bg-white/35 hover:bg-white/80'
+                    }`}
+                    aria-label={`Slide ${idx + 1}`}
+                  />
+                ))}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ================= CENTER-RIGHT LOGIN SECTION (TRANSPARENT BACKGROUND, PRO GLOSSY CARD - Requirement 1, 3, 5) ================= */}
+      {/* ================= CENTER-RIGHT LOGIN SECTION (TRANSPARAN DENGAN SUDUT TUMPUL - PRO GLOSSY GLASS) ================= */}
       <div className="relative z-10 flex-1 flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 min-h-screen pointer-events-auto">
-        {/* KOTAK TRANSPARAN DENGAN SUDUT TUMPUL (PRO-GLOSSY GLASS CARD) */}
         <div
           className={`relative z-10 w-full max-w-[420px] rounded-[30px] sm:rounded-[34px] p-6 sm:p-8 transition-all overflow-hidden ${
             darkMode
-              ? 'bg-slate-900/85 backdrop-blur-2xl border border-white/20 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.8)] ring-1 ring-white/10'
-              : 'bg-white/85 backdrop-blur-2xl border border-white/95 shadow-[0_25px_65px_-10px_rgba(0,0,0,0.45)] ring-1 ring-slate-900/5'
+              ? 'bg-slate-950/40 backdrop-blur-xl border border-white/20 shadow-[0_30px_70px_rgba(0,0,0,0.7)] ring-1 ring-white/15'
+              : 'bg-white/30 backdrop-blur-xl border border-white/50 shadow-[0_30px_70px_rgba(0,0,0,0.35)] ring-1 ring-white/30'
           }`}
         >
           {/* Specular Glossy Sheen Highlight on Top Edge */}
-          <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white/60 dark:from-white/15 to-transparent pointer-events-none rounded-t-[30px] sm:rounded-t-[34px]" />
+          <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white/40 dark:from-white/15 to-transparent pointer-events-none rounded-t-[30px] sm:rounded-t-[34px]" />
 
           {/* Logo & Application Header inside Transparent Card */}
           <div className="relative flex items-center gap-3.5 mb-6">
@@ -266,13 +269,13 @@ export default function Login() {
               <img
                 src={config.logoKaihUrl || '/kaih_logo.png'}
                 alt="Logo 7 KAIH"
-                className="w-12 h-12 object-contain rounded-full bg-white/90 backdrop-blur-sm p-0.5 shadow-sm border border-slate-100 dark:border-slate-700"
+                className="w-12 h-12 object-contain rounded-full bg-white/80 backdrop-blur-sm p-0.5 shadow-sm border border-white/60 dark:border-slate-700"
               />
               {config.logoYaspenUrl ? (
                 <img
                   src={config.logoYaspenUrl}
                   alt="Logo Yayasan Budi Utomo"
-                  className="w-11 h-11 object-contain rounded-full bg-white/90 backdrop-blur-sm p-0.5 shadow-sm border border-slate-100 dark:border-slate-700"
+                  className="w-11 h-11 object-contain rounded-full bg-white/80 backdrop-blur-sm p-0.5 shadow-sm border border-white/60 dark:border-slate-700"
                 />
               ) : (
                 <div className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex flex-col items-center justify-center text-white shadow-md border-2 border-amber-400">
@@ -282,10 +285,10 @@ export default function Login() {
               )}
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl font-extrabold text-[#2563EB] dark:text-blue-400 tracking-tight leading-none">
+              <h2 className="text-xl font-extrabold text-[#2563EB] dark:text-blue-400 tracking-tight leading-none drop-shadow-xs">
                 AKTIVITASKU
               </h2>
-              <p className={`text-[11px] mt-1 leading-snug font-medium ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+              <p className={`text-[11px] mt-1 leading-snug font-bold ${darkMode ? 'text-slate-300' : 'text-slate-800'}`}>
                 Sistem Pemantauan 7 KAIH & Evaluasi Siswa
                 <br />
                 Perguruan Budi Utomo
@@ -295,7 +298,7 @@ export default function Login() {
 
           {/* Alerts */}
           {error && (
-            <div className="relative mb-4 rounded-xl bg-red-50/90 dark:bg-red-950/70 backdrop-blur-sm border border-red-200 dark:border-red-800/80 p-3 text-xs text-red-700 dark:text-red-300 font-medium leading-relaxed shadow-xs">
+            <div className="relative mb-4 rounded-xl bg-red-500/20 backdrop-blur-md border border-red-400/40 p-3 text-xs text-red-100 font-bold leading-relaxed shadow-xs">
               {error}
             </div>
           )}
@@ -303,21 +306,21 @@ export default function Login() {
           <form onSubmit={handleLogin} className="relative space-y-4">
             {/* Email / Username Field */}
             <div>
-              <label className={`block text-xs font-bold mb-1.5 ${darkMode ? 'text-blue-300' : 'text-[#1E3A8A]'}`}>
+              <label className={`block text-xs font-black mb-1.5 ${darkMode ? 'text-blue-200' : 'text-slate-900'}`}>
                 Email / Username <span className="text-red-500">*</span>
               </label>
               <div
                 className={`flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
                   darkMode
-                    ? 'bg-slate-800/80 border-slate-700/80 focus-within:bg-slate-800'
-                    : 'bg-[#EEF4FF]/75 border-slate-200/90 focus-within:bg-white shadow-inner'
+                    ? 'bg-slate-900/60 border-white/20 focus-within:bg-slate-900/90'
+                    : 'bg-white/45 border-white/60 focus-within:bg-white/80 shadow-xs'
                 }`}
               >
                 <div
                   className={`w-10 h-10 flex items-center justify-center border-r shrink-0 ${
                     darkMode
-                      ? 'bg-slate-800/90 border-slate-700 text-slate-300'
-                      : 'bg-white/80 border-slate-200/80 text-slate-500'
+                      ? 'bg-slate-800/60 border-white/10 text-slate-300'
+                      : 'bg-white/50 border-white/50 text-slate-700'
                   }`}
                 >
                   <User className="w-4 h-4" />
@@ -328,8 +331,8 @@ export default function Login() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="contoh: guru1@budiutomo.com"
-                  className={`w-full px-3 py-2.5 text-xs sm:text-sm font-medium bg-transparent focus:outline-none select-text ${
-                    darkMode ? 'text-white placeholder-slate-400' : 'text-slate-800 placeholder-slate-400'
+                  className={`w-full px-3 py-2.5 text-xs sm:text-sm font-bold bg-transparent focus:outline-none select-text ${
+                    darkMode ? 'text-white placeholder-slate-400' : 'text-slate-900 placeholder-slate-500'
                   }`}
                 />
               </div>
@@ -337,21 +340,21 @@ export default function Login() {
 
             {/* Password Field */}
             <div>
-              <label className={`block text-xs font-bold mb-1.5 ${darkMode ? 'text-blue-300' : 'text-[#1E3A8A]'}`}>
+              <label className={`block text-xs font-black mb-1.5 ${darkMode ? 'text-blue-200' : 'text-slate-900'}`}>
                 Password <span className="text-red-500">*</span>
               </label>
               <div
                 className={`flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
                   darkMode
-                    ? 'bg-slate-800/80 border-slate-700/80 focus-within:bg-slate-800'
-                    : 'bg-[#EEF4FF]/75 border-slate-200/90 focus-within:bg-white shadow-inner'
+                    ? 'bg-slate-900/60 border-white/20 focus-within:bg-slate-900/90'
+                    : 'bg-white/45 border-white/60 focus-within:bg-white/80 shadow-xs'
                 }`}
               >
                 <div
                   className={`w-10 h-10 flex items-center justify-center border-r shrink-0 ${
                     darkMode
-                      ? 'bg-slate-800/90 border-slate-700 text-slate-300'
-                      : 'bg-white/80 border-slate-200/80 text-slate-500'
+                      ? 'bg-slate-800/60 border-white/10 text-slate-300'
+                      : 'bg-white/50 border-white/50 text-slate-700'
                   }`}
                 >
                   <Lock className="w-4 h-4" />
@@ -362,8 +365,8 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className={`w-full px-3 py-2.5 text-xs sm:text-sm font-medium bg-transparent focus:outline-none select-text ${
-                    darkMode ? 'text-white placeholder-slate-400' : 'text-slate-800 placeholder-slate-400'
+                  className={`w-full px-3 py-2.5 text-xs sm:text-sm font-bold bg-transparent focus:outline-none select-text ${
+                    darkMode ? 'text-white placeholder-slate-400' : 'text-slate-900 placeholder-slate-500'
                   }`}
                 />
                 <button
@@ -371,8 +374,8 @@ export default function Login() {
                   onClick={() => setShowPassword(!showPassword)}
                   className={`w-10 h-10 flex items-center justify-center border-l shrink-0 cursor-pointer transition-colors ${
                     darkMode
-                      ? 'bg-slate-800/90 border-slate-700 text-blue-400 hover:text-blue-300'
-                      : 'bg-white/80 border-slate-200/80 text-blue-600 hover:bg-slate-50'
+                      ? 'bg-slate-800/60 border-white/10 text-blue-400 hover:text-blue-300'
+                      : 'bg-white/50 border-white/50 text-blue-700 hover:bg-white/70'
                   }`}
                   title={showPassword ? 'Sembunyikan Password' : 'Tampilkan Password'}
                 >
@@ -383,16 +386,16 @@ export default function Login() {
 
             {/* Kode Keamanan (Captcha) Field */}
             <div>
-              <label className={`block text-xs font-bold mb-1.5 ${darkMode ? 'text-blue-300' : 'text-[#1E3A8A]'}`}>
+              <label className={`block text-xs font-black mb-1.5 ${darkMode ? 'text-blue-200' : 'text-slate-900'}`}>
                 Kode Keamanan <span className="text-red-500">*</span>
               </label>
               <div className="flex items-center gap-2">
                 <div
                   className={`flex-1 flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
-                    darkMode ? 'bg-slate-800/80 border-slate-700' : 'bg-white/90 border-slate-200 shadow-inner'
+                    darkMode ? 'bg-slate-900/60 border-white/20' : 'bg-white/50 border-white/60 shadow-xs'
                   }`}
                 >
-                  <div className={`pl-2.5 pr-1.5 py-2 ${darkMode ? 'text-slate-400' : 'text-slate-400'}`}>
+                  <div className={`pl-2.5 pr-1.5 py-2 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
                     <Shield className="w-4 h-4" />
                   </div>
                   <input
@@ -402,15 +405,15 @@ export default function Login() {
                     value={captchaInput}
                     onChange={(e) => setCaptchaInput(e.target.value)}
                     placeholder="huruf/angka"
-                    className={`w-full pr-2.5 py-2 text-xs sm:text-sm font-semibold tracking-wider bg-transparent focus:outline-none select-text ${
-                      darkMode ? 'text-white placeholder-slate-400' : 'text-slate-800 placeholder-slate-400'
+                    className={`w-full pr-2.5 py-2 text-xs sm:text-sm font-black tracking-wider bg-transparent focus:outline-none select-text ${
+                      darkMode ? 'text-white placeholder-slate-400' : 'text-slate-900 placeholder-slate-500'
                     }`}
                   />
                 </div>
 
                 {/* Stylized Captcha Visual Box */}
                 <div
-                  className="relative h-10 px-3.5 rounded-xl border border-indigo-200/80 bg-gradient-to-r from-indigo-100/80 via-purple-100/80 to-blue-100/80 backdrop-blur-sm flex items-center justify-center overflow-hidden shrink-0 shadow-inner"
+                  className="relative h-10 px-3.5 rounded-xl border border-white/40 bg-gradient-to-r from-white/50 via-purple-100/40 to-blue-100/50 backdrop-blur-md flex items-center justify-center overflow-hidden shrink-0 shadow-xs"
                   style={{ minWidth: '100px' }}
                   title="Kode Keamanan Visual"
                 >
@@ -442,21 +445,21 @@ export default function Login() {
                   onClick={refreshCaptcha}
                   className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
                     darkMode
-                      ? 'bg-slate-800 border-slate-700 text-blue-400 hover:bg-slate-700'
-                      : 'bg-white/90 border-blue-200 text-blue-600 hover:bg-blue-50 shadow-xs'
+                      ? 'bg-slate-800/80 border-white/10 text-blue-400 hover:bg-slate-700'
+                      : 'bg-white/60 border-white/60 text-blue-700 hover:bg-white/80 shadow-xs'
                   }`}
                   title="Acak Ulang Kode Keamanan"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <p className={`mt-1 text-[10px] ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+              <p className={`mt-1 text-[10px] font-semibold ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
                 Huruf kecil dan angka saja, persis 4 karakter, tanpa spasi.
               </p>
             </div>
 
             {/* Links Row: Lupa Password & Info Akun */}
-            <div className="flex items-center justify-center gap-2 pt-0.5 text-xs font-semibold text-[#2563EB] dark:text-blue-400">
+            <div className="flex items-center justify-center gap-2 pt-0.5 text-xs font-bold text-blue-600 dark:text-blue-400">
               <button
                 type="button"
                 onClick={() => setShowHelpModal(true)}
