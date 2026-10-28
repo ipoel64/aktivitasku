@@ -6,53 +6,94 @@ import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import PrincipalDashboard from './pages/PrincipalDashboard';
 import FoundationDashboard from './pages/FoundationDashboard';
+import KaihLoadingScreen from './components/KaihLoadingScreen';
 
 function App() {
   const [session, setSession] = useState<any>(null);
-  const [role, setRole] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(() => {
+    return localStorage.getItem('BUDI_UTOMO_USER_ROLE') || null;
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchSessionAndRole = async (currentSession: any) => {
-      setSession(currentSession);
-      if (currentSession?.user) {
+    let isMounted = true;
+
+    const fetchRole = async (userId: string) => {
+      try {
         const { data } = await supabase
           .from('users')
           .select('role')
-          .eq('id', currentSession.user.id)
+          .eq('id', userId)
           .single();
-        setRole(data?.role || null);
-      } else {
-        setRole(null);
+        if (isMounted) {
+          const userRole = data?.role || null;
+          setRole(userRole);
+          if (userRole) {
+            localStorage.setItem('BUDI_UTOMO_USER_ROLE', userRole);
+          } else {
+            localStorage.removeItem('BUDI_UTOMO_USER_ROLE');
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching role:', err);
       }
-      setLoading(false);
     };
 
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      fetchSessionAndRole(currentSession);
+    // Initial session retrieval
+    supabase.auth.getSession().then(async ({ data: { session: currentSession } }) => {
+      if (!isMounted) return;
+      setSession(currentSession);
+      if (currentSession?.user) {
+        await fetchRole(currentSession.user.id);
+      } else {
+        setRole(null);
+        localStorage.removeItem('BUDI_UTOMO_USER_ROLE');
+      }
+      if (isMounted) {
+        setLoading(false);
+      }
     });
 
+    // Handle Auth Changes silently (prevent unmounting on tab switch or token refresh)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      setLoading(true);
-      fetchSessionAndRole(currentSession);
+    } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      if (!isMounted) return;
+
+      if (event === 'SIGNED_OUT' || !currentSession) {
+        setSession(null);
+        setRole(null);
+        localStorage.removeItem('BUDI_UTOMO_USER_ROLE');
+        return;
+      }
+
+      setSession(currentSession);
+
+      // Only re-fetch role if signed in or not yet set
+      if (currentSession?.user) {
+        const cachedRole = localStorage.getItem('BUDI_UTOMO_USER_ROLE');
+        if (!cachedRole || event === 'SIGNED_IN') {
+          await fetchRole(currentSession.user.id);
+        }
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">Memuat Sesi...</div>;
+    return <KaihLoadingScreen message="Memverifikasi Sesi Masuk..." />;
   }
 
   // Redirect logic based on role
+  // Kepsek & Yayasan use the same rich claymorphic portal as Guru (/dashboard) in read-only monitoring mode
   const getHomeRoute = () => {
     if (role === 'admin') return '/admin';
-    if (role === 'guru') return '/dashboard';
-    if (role === 'kepsek') return '/principal';
-    if (role === 'yayasan') return '/foundation';
-    return '/'; // Fallback if no role or student (student gets rejected in Login anyway)
+    if (['guru', 'kepsek', 'yayasan'].includes(role || '')) return '/dashboard';
+    return '/'; // Fallback if no role or unauthenticated
   };
 
   return (
@@ -82,26 +123,29 @@ function App() {
             )
           } 
         />
+        {/* Forward legacy routes to /dashboard for unified leadership experience */}
         <Route 
           path="/principal" 
           element={
-            session && role === 'kepsek' ? (
-              <PrincipalDashboard />
+            session && ['kepsek', 'admin'].includes(role || '') ? (
+              <Navigate to="/dashboard" replace />
             ) : (
-              <Navigate to="/" replace />
+              <PrincipalDashboard />
             )
           } 
         />
         <Route 
           path="/foundation" 
           element={
-            session && role === 'yayasan' ? (
-              <FoundationDashboard />
+            session && ['yayasan', 'admin'].includes(role || '') ? (
+              <Navigate to="/dashboard" replace />
             ) : (
-              <Navigate to="/" replace />
+              <FoundationDashboard />
             )
           } 
         />
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );
