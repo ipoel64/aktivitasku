@@ -10,65 +10,21 @@ import {
   Users,
   ShieldCheck,
   BarChart3,
-  LayoutGrid,
-  Trash2,
   Moon,
   Sun,
   ArrowRight,
-  X,
-  CheckCircle2,
-  Smartphone,
   GraduationCap,
-  Building2,
-  Award,
   HelpCircle,
+  X,
 } from 'lucide-react';
-
-interface KaihSlide {
-  id: number;
-  title: string;
-  habit: string;
-  image: string;
-  quote: string;
-}
-
-const KAIH_GALLERY: KaihSlide[] = [
-  {
-    id: 1,
-    title: 'Gemar Belajar & Kolaborasi Kelas',
-    habit: 'Kebiasaan 5: Gemar Belajar',
-    image: 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=1400&q=80',
-    quote: 'Data akurat, evaluasi tepat, membentuk generasi Indonesia hebat yang berkarakter.',
-  },
-  {
-    id: 2,
-    title: 'Bangun Pagi & Semangat Disiplin Sekolah',
-    habit: 'Kebiasaan 1: Bangun Pagi',
-    image: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1400&q=80',
-    quote: 'Kedisiplinan dimulai sejak pagi hari untuk meraih cita-cita masa depan yang gemilang.',
-  },
-  {
-    id: 3,
-    title: 'Berolahraga & Kesehatan Fisik Siswa',
-    habit: 'Kebiasaan 3: Berolahraga',
-    image: 'https://images.unsplash.com/photo-1526676037777-05a232554f77?auto=format&fit=crop&w=1400&q=80',
-    quote: 'Di dalam tubuh yang sehat terdapat jiwa dan pikiran yang tangguh serta berprestasi.',
-  },
-  {
-    id: 4,
-    title: 'Makan Sehat, Bergizi & Beribadah',
-    habit: 'Kebiasaan 2 & 4: Beribadah & Sehat',
-    image: 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=1400&q=80',
-    quote: 'Keseimbangan spiritual, akhlak mulia, dan gizi seimbang menjadi fondasi siswa unggul.',
-  },
-  {
-    id: 5,
-    title: 'Bermasyarakat & Gotong Royong Positif',
-    habit: 'Kebiasaan 6 & 7: Bermasyarakat & Tidur Cepat',
-    image: 'https://images.unsplash.com/photo-1529390079861-591de354faf5?auto=format&fit=crop&w=1400&q=80',
-    quote: 'Kolaborasi hangat antara guru, siswa, dan orang tua demi pendidikan berdaya saing.',
-  },
-];
+import {
+  loadLandingConfig,
+  DEFAULT_LANDING_CONFIG,
+} from '../utils/appConfig';
+import type {
+  LandingPageConfig,
+  KaihSlideConfig,
+} from '../utils/appConfig';
 
 function generateCaptchaCode(): string {
   const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -80,6 +36,7 @@ function generateCaptchaCode(): string {
 }
 
 export default function Login() {
+  const [config, setConfig] = useState<LandingPageConfig>(DEFAULT_LANDING_CONFIG);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -87,11 +44,21 @@ export default function Login() {
   const [captchaInput, setCaptchaInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(false);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
-  const [showAppsModal, setShowAppsModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+
+  // Load landing configuration dynamically from Supabase
+  useEffect(() => {
+    loadLandingConfig().then((cfg) => {
+      setConfig(cfg);
+    });
+  }, []);
+
+  const slides: KaihSlideConfig[] =
+    config.slides && config.slides.length > 0
+      ? [...config.slides].sort((a, b) => a.order - b.order)
+      : DEFAULT_LANDING_CONFIG.slides;
 
   const refreshCaptcha = useCallback(() => {
     setCaptchaCode(generateCaptchaCode());
@@ -100,30 +67,12 @@ export default function Login() {
 
   // Auto-rotate hero background every 8 seconds
   useEffect(() => {
+    if (slides.length <= 1) return;
     const interval = setInterval(() => {
-      setActiveSlideIndex((prev) => (prev + 1) % KAIH_GALLERY.length);
+      setActiveSlideIndex((prev) => (prev + 1) % slides.length);
     }, 8000);
     return () => clearInterval(interval);
-  }, []);
-
-  const handleClearCache = () => {
-    try {
-      localStorage.clear();
-      sessionStorage.clear();
-      if ('caches' in window) {
-        caches.keys().then((names) => {
-          names.forEach((name) => caches.delete(name));
-        });
-      }
-      refreshCaptcha();
-      setError(null);
-      setToastMsg('Cache browser & sesi lokal berhasil dibersihkan!');
-      setTimeout(() => setToastMsg(null), 4000);
-    } catch {
-      setToastMsg('Cache berhasil direset.');
-      setTimeout(() => setToastMsg(null), 3000);
-    }
-  };
+  }, [slides.length]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,16 +128,20 @@ export default function Login() {
     }
   };
 
-  const currentSlide = KAIH_GALLERY[activeSlideIndex];
+  const currentSlide = slides[activeSlideIndex] || slides[0] || DEFAULT_LANDING_CONFIG.slides[0];
 
   return (
-    <div className={`min-h-screen w-full flex flex-col lg:flex-row overflow-x-hidden select-none ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-[#F1F5F9] text-slate-800'}`}>
-      {/* LEFT HERO SECTION (Matches sdmpkh.kemensos.go.id layout) */}
-      <div className="relative lg:w-[56%] xl:w-[57%] min-h-[420px] lg:min-h-screen flex flex-col justify-between p-6 sm:p-10 lg:p-12 overflow-hidden">
-        {/* Background Image with Smooth Transition */}
-        {KAIH_GALLERY.map((slide, idx) => (
+    <div
+      className={`min-h-screen w-full flex flex-col lg:flex-row overflow-x-hidden select-none ${
+        darkMode ? 'bg-slate-950 text-slate-100' : 'bg-white text-slate-800'
+      }`}
+    >
+      {/* LEFT HERO SECTION (Dynamic 7 KAIH Gallery with Glassmorphism Overlay) */}
+      <div className="relative lg:w-[56%] xl:w-[57%] min-h-[440px] lg:min-h-screen flex flex-col justify-between p-6 sm:p-10 lg:p-12 overflow-hidden">
+        {/* Background Images with Smooth Crossfade */}
+        {slides.map((slide, idx) => (
           <div
-            key={slide.id}
+            key={slide.id || idx}
             className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out ${
               idx === activeSlideIndex ? 'opacity-100 scale-100' : 'opacity-0 scale-105'
             }`}
@@ -196,9 +149,9 @@ export default function Login() {
           />
         ))}
 
-        {/* Dark Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-900/65 to-slate-900/35 pointer-events-none" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/30 pointer-events-none" />
+        {/* Dark Gradient Overlay for Maximum Readability */}
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-900/70 to-slate-900/40 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-slate-950/30 pointer-events-none" />
 
         {/* Top Bar inside Hero: Habit Pill & Dark Mode Button */}
         <div className="relative z-10 flex items-center justify-between gap-4">
@@ -210,7 +163,7 @@ export default function Login() {
           <button
             type="button"
             onClick={() => setDarkMode(!darkMode)}
-            className="inline-flex items-center gap-2 bg-white hover:bg-slate-100 text-slate-800 px-4 py-2 rounded-full shadow-lg text-xs font-bold transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 bg-white/95 hover:bg-white text-slate-800 px-4 py-2 rounded-full shadow-lg text-xs font-bold transition-all cursor-pointer"
           >
             {darkMode ? (
               <>
@@ -230,26 +183,21 @@ export default function Login() {
         <div className="relative z-10 my-8 lg:my-auto max-w-xl">
           <div className="bg-slate-900/75 backdrop-blur-md border border-white/15 rounded-2xl p-6 sm:p-8 shadow-2xl">
             <h1 className="text-2xl sm:text-3xl lg:text-[34px] font-extrabold text-white tracking-tight leading-tight flex items-center gap-2.5 flex-wrap">
-              <span>Selamat Datang di AKTIVITASKU</span>
-              <span className="inline-block animate-bounce">👋</span>
+              <span>{config.heroTitle}</span>
             </h1>
             <p className="mt-3.5 text-sm sm:text-[15px] text-slate-200/95 leading-relaxed font-normal">
-              Perguruan Budi Utomo — Sistem Informasi Pemantauan & Evaluasi Gerakan{' '}
-              <strong className="text-amber-300 font-semibold">7 Kebiasaan Anak Indonesia Hebat (7 KAIH)</strong>,
-              Absensi Terpadu, dan Pemetaan Karakter Siswa.
+              {config.heroSubtitle}
             </p>
           </div>
 
-          {/* 3 Feature Pills (Matches Reference Icons & Text Layout) */}
+          {/* 3 Feature Pills */}
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-xl bg-slate-900/75 backdrop-blur-md border border-white/15 flex items-center justify-center text-white shrink-0 shadow-md">
                 <Users className="w-5 h-5 text-sky-300" />
               </div>
               <div className="text-xs sm:text-[13px] font-semibold text-white leading-snug drop-shadow">
-                Data Siswa & Kelas
-                <br />
-                Terintegrasi
+                {config.feature1}
               </div>
             </div>
 
@@ -258,8 +206,7 @@ export default function Login() {
                 <ShieldCheck className="w-5 h-5 text-emerald-300" />
               </div>
               <div className="text-xs sm:text-[13px] font-semibold text-white leading-snug drop-shadow">
-                Mendukung Karakter
-                <br />7 KAIH Siswa
+                {config.feature2}
               </div>
             </div>
 
@@ -268,9 +215,7 @@ export default function Login() {
                 <BarChart3 className="w-5 h-5 text-amber-300" />
               </div>
               <div className="text-xs sm:text-[13px] font-semibold text-white leading-snug drop-shadow">
-                Transparan
-                <br />
-                dan Akuntabel
+                {config.feature3}
               </div>
             </div>
           </div>
@@ -285,9 +230,9 @@ export default function Login() {
             <div className="mt-2 flex items-center justify-between text-[11px] text-amber-300/90 font-semibold">
               <span>— {currentSlide.title}</span>
               <div className="flex gap-1.5">
-                {KAIH_GALLERY.map((s, idx) => (
+                {slides.map((s, idx) => (
                   <button
-                    key={s.id}
+                    key={s.id || idx}
                     type="button"
                     onClick={() => setActiveSlideIndex(idx)}
                     className={`h-1.5 rounded-full transition-all cursor-pointer ${
@@ -302,27 +247,33 @@ export default function Login() {
         </div>
       </div>
 
-      {/* CENTER-RIGHT LOGIN FORM SECTION */}
-      <div className={`flex-1 flex items-center justify-center p-5 sm:p-8 lg:p-10 ${darkMode ? 'bg-slate-900' : 'bg-[#F1F5F9]'}`}>
-        <div
-          className={`w-full max-w-[430px] rounded-[28px] p-6 sm:p-8 shadow-xl border transition-colors ${
-            darkMode
-              ? 'bg-slate-800/95 border-slate-700 text-slate-100 shadow-slate-950/50'
-              : 'bg-white border-slate-100 text-slate-800 shadow-slate-200/80'
-          }`}
-        >
-          {/* Logo & Application Header (Matches Reference e-SDM Header) */}
-          <div className="flex items-center gap-3.5 mb-6">
-            <div className="flex items-center gap-2 shrink-0">
+      {/* CENTER-RIGHT LOGIN FORM SECTION (Clean Pure White, Zero Grey Canvas) */}
+      <div
+        className={`flex-1 flex flex-col justify-center items-center p-6 sm:p-10 lg:p-12 min-h-screen ${
+          darkMode ? 'bg-slate-900' : 'bg-white'
+        }`}
+      >
+        <div className="w-full max-w-[420px]">
+          {/* Logo & Application Header */}
+          <div className="flex items-center gap-3.5 mb-7">
+            <div className="flex items-center gap-2.5 shrink-0">
               <img
-                src="/kaih_logo.png"
-                alt="Logo Gerakan 7 KAIH"
-                className="w-12 h-12 object-contain rounded-full bg-white p-0.5 shadow-sm border border-slate-100"
+                src={config.logoKaihUrl || '/kaih_logo.png'}
+                alt="Logo 7 KAIH"
+                className="w-13 h-13 object-contain rounded-full bg-white p-0.5 shadow-sm border border-slate-100"
               />
-              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex flex-col items-center justify-center text-white shadow-sm border-2 border-amber-400">
-                <GraduationCap className="w-5 h-5 text-amber-300" />
-                <span className="text-[7px] font-black tracking-tighter leading-none mt-0.5">YASPEN</span>
-              </div>
+              {config.logoYaspenUrl ? (
+                <img
+                  src={config.logoYaspenUrl}
+                  alt="Logo Yayasan Budi Utomo"
+                  className="w-12 h-12 object-contain rounded-full bg-white p-0.5 shadow-sm border border-slate-100"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex flex-col items-center justify-center text-white shadow-sm border-2 border-amber-400">
+                  <GraduationCap className="w-5 h-5 text-amber-300" />
+                  <span className="text-[7.5px] font-black tracking-tighter leading-none mt-0.5">YASPEN</span>
+                </div>
+              )}
             </div>
             <div className="min-w-0">
               <h2 className="text-xl font-extrabold text-[#2563EB] dark:text-blue-400 tracking-tight leading-none">
@@ -336,17 +287,10 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Alerts / Toast */}
+          {/* Alerts */}
           {error && (
             <div className="mb-4 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 p-3 text-xs text-red-700 dark:text-red-300 font-medium leading-relaxed">
               {error}
-            </div>
-          )}
-
-          {toastMsg && (
-            <div className="mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 p-3 text-xs text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-              <span>{toastMsg}</span>
             </div>
           )}
 
@@ -358,12 +302,12 @@ export default function Login() {
               </label>
               <div
                 className={`flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
-                  darkMode ? 'bg-slate-700/70 border-slate-600' : 'bg-[#EEF4FF] border-slate-200/90'
+                  darkMode ? 'bg-slate-800 border-slate-700' : 'bg-[#EEF4FF] border-slate-200/90'
                 }`}
               >
                 <div
                   className={`w-11 h-11 flex items-center justify-center border-r shrink-0 ${
-                    darkMode ? 'bg-slate-800 border-slate-600 text-slate-300' : 'bg-white border-slate-200/80 text-slate-500'
+                    darkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-200/80 text-slate-500'
                   }`}
                 >
                   <User className="w-4 h-4" />
@@ -388,12 +332,12 @@ export default function Login() {
               </label>
               <div
                 className={`flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
-                  darkMode ? 'bg-slate-700/70 border-slate-600' : 'bg-[#EEF4FF] border-slate-200/90'
+                  darkMode ? 'bg-slate-800 border-slate-700' : 'bg-[#EEF4FF] border-slate-200/90'
                 }`}
               >
                 <div
                   className={`w-11 h-11 flex items-center justify-center border-r shrink-0 ${
-                    darkMode ? 'bg-slate-800 border-slate-600 text-slate-300' : 'bg-white border-slate-200/80 text-slate-500'
+                    darkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-slate-200/80 text-slate-500'
                   }`}
                 >
                   <Lock className="w-4 h-4" />
@@ -413,7 +357,7 @@ export default function Login() {
                   onClick={() => setShowPassword(!showPassword)}
                   className={`w-11 h-11 flex items-center justify-center border-l shrink-0 cursor-pointer transition-colors ${
                     darkMode
-                      ? 'bg-slate-800 border-slate-600 text-blue-400 hover:text-blue-300'
+                      ? 'bg-slate-800 border-slate-700 text-blue-400 hover:text-blue-300'
                       : 'bg-white border-slate-200/80 text-blue-600 hover:bg-slate-50'
                   }`}
                   title={showPassword ? 'Sembunyikan Password' : 'Tampilkan Password'}
@@ -431,7 +375,7 @@ export default function Login() {
               <div className="flex items-center gap-2">
                 <div
                   className={`flex-1 flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500 ${
-                    darkMode ? 'bg-slate-700/70 border-slate-600' : 'bg-white border-slate-200'
+                    darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
                   }`}
                 >
                   <div className={`pl-3 pr-2 py-2.5 ${darkMode ? 'text-slate-400' : 'text-slate-400'}`}>
@@ -456,7 +400,6 @@ export default function Login() {
                   style={{ minWidth: '108px' }}
                   title="Kode Keamanan Visual"
                 >
-                  {/* Decorative noise lines */}
                   <svg className="absolute inset-0 w-full h-full opacity-45 pointer-events-none" viewBox="0 0 110 44">
                     <path d="M5 10 Q 35 35, 65 12 T 105 30" stroke="#6366f1" strokeWidth="1.5" fill="none" />
                     <path d="M8 34 Q 45 8, 75 30 T 102 10" stroke="#9333ea" strokeWidth="1.2" fill="none" />
@@ -485,7 +428,7 @@ export default function Login() {
                   onClick={refreshCaptcha}
                   className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
                     darkMode
-                      ? 'bg-slate-800 border-slate-600 text-blue-400 hover:bg-slate-700'
+                      ? 'bg-slate-800 border-slate-700 text-blue-400 hover:bg-slate-700'
                       : 'bg-white border-blue-200 text-blue-600 hover:bg-blue-50'
                   }`}
                   title="Acak Ulang Kode Keamanan"
@@ -532,41 +475,21 @@ export default function Login() {
                 </>
               )}
             </button>
-
-            {/* Secondary Button: Aplikasi & Layanan Terkait */}
-            <button
-              type="button"
-              onClick={() => setShowAppsModal(true)}
-              className={`w-full py-3 px-4 rounded-xl border font-bold text-xs sm:text-[13px] flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                darkMode
-                  ? 'border-blue-500/40 text-blue-300 hover:bg-blue-950/40'
-                  : 'border-blue-200 text-[#2563EB] hover:bg-blue-50/70'
-              }`}
-            >
-              <LayoutGrid className="w-4 h-4" />
-              <span>Aplikasi & Layanan Terkait</span>
-            </button>
-
-            {/* Green Button: Hapus Cache Browser */}
-            <button
-              type="button"
-              onClick={handleClearCache}
-              className="w-full py-3 px-4 rounded-xl bg-[#16A34A] hover:bg-green-700 active:bg-green-800 text-white font-bold text-xs sm:text-[13px] shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Hapus Cache Browser</span>
-            </button>
           </form>
         </div>
       </div>
 
-      {/* FAR-RIGHT PHOTO STRIP (Matches vertical photo strip on the right edge of reference) */}
-      <div className="hidden lg:flex lg:w-[96px] xl:w-[118px] h-screen flex-col gap-1.5 p-1.5 bg-white/80 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shrink-0">
-        {KAIH_GALLERY.map((slide, idx) => {
+      {/* FAR-RIGHT PHOTO STRIP (Matches vertical photo strip on the right edge) */}
+      <div
+        className={`hidden lg:flex lg:w-[96px] xl:w-[118px] h-screen flex-col gap-1.5 p-1.5 border-l shrink-0 ${
+          darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+        }`}
+      >
+        {slides.map((slide, idx) => {
           const isActive = idx === activeSlideIndex;
           return (
             <button
-              key={slide.id}
+              key={slide.id || idx}
               type="button"
               onClick={() => setActiveSlideIndex(idx)}
               className={`relative flex-1 w-full rounded-lg overflow-hidden group cursor-pointer transition-all ${
@@ -592,94 +515,6 @@ export default function Login() {
         })}
       </div>
 
-      {/* MODAL: APLIKASI & LAYANAN TERKAIT */}
-      {showAppsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-100 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-4 mb-5">
-              <div className="flex items-center gap-3">
-                <img src="/kaih_logo.png" alt="7 KAIH" className="w-10 h-10 object-contain" />
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
-                    Ekosistem Aplikasi AKTIVITASKU & 7 KAIH
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Layanan Terintegrasi Yayasan Pendidikan Budi Utomo
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAppsModal(false)}
-                className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left">
-              <div className="p-4 rounded-2xl border border-blue-100 bg-blue-50/50 dark:bg-slate-700/50 dark:border-slate-600">
-                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center mb-2.5">
-                  <Smartphone className="w-5 h-5" />
-                </div>
-                <h4 className="text-xs font-extrabold text-slate-900 dark:text-white">
-                  Aplikasi Mobile Siswa (7 KAIH)
-                </h4>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                  Input rencana & realisasi 7 kebiasaan harian siswa dilengkapi foto geotagging dan jadwal ibadah.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 dark:bg-slate-700/50 dark:border-slate-600">
-                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center mb-2.5">
-                  <GraduationCap className="w-5 h-5" />
-                </div>
-                <h4 className="text-xs font-extrabold text-slate-900 dark:text-white">
-                  Portal Guru & Wali Kelas
-                </h4>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                  Pemantauan siswa sesuai kelas ajar, penilaian aktivitas 7 KAIH, absensi, cetak PDF biodata & peta sebaran.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-2xl border border-amber-100 bg-amber-50/50 dark:bg-slate-700/50 dark:border-slate-600">
-                <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center mb-2.5">
-                  <Award className="w-5 h-5" />
-                </div>
-                <h4 className="text-xs font-extrabold text-slate-900 dark:text-white">
-                  Dashboard Kepala Sekolah & Yayasan
-                </h4>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                  Analitik eksekutif capaian karakter siswa lintas angkatan, rekap kehadiran, dan evaluasi mutu sekolah.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-2xl border border-purple-100 bg-purple-50/50 dark:bg-slate-700/50 dark:border-slate-600">
-                <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center mb-2.5">
-                  <Building2 className="w-5 h-5" />
-                </div>
-                <h4 className="text-xs font-extrabold text-slate-900 dark:text-white">
-                  Panel Kontrol Super Admin
-                </h4>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                  Manajemen akun terpusat (input satuan & impor CSV/Excel) serta pembagian kelas mengajar guru.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowAppsModal(false)}
-                className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* MODAL: LUPA PASSWORD / PANDUAN AKUN */}
       {showHelpModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4">
@@ -698,7 +533,7 @@ export default function Login() {
                 onClick={() => setShowHelpModal(false)}
                 className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
