@@ -163,73 +163,84 @@ export default function Login() {
         <div className="absolute inset-0 bg-radial from-transparent via-slate-950/20 to-slate-950/50 pointer-events-none" />
       </div>
 
-      {/* ================= LEFT SECTION (COMPACT & EXPANSIVE - Requirement 1 & 4) ================= */}
-      <div className="relative z-10 lg:w-[54%] xl:w-[56%] flex flex-col justify-between p-5 sm:p-7 lg:p-9 min-h-[360px] lg:min-h-screen pointer-events-auto">
-        {/* Top Bar: Compact Habit Pill & Compact Dark Mode Button */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="inline-flex items-center gap-2 bg-emerald-500/25 hover:bg-emerald-500/35 backdrop-blur-2xl border border-emerald-300/40 text-emerald-100 px-3.5 py-1.5 rounded-full text-[11px] font-bold tracking-wide shadow-[0_6px_20px_rgba(16,185,129,0.3)] ring-1 ring-white/20 transition-all">
-            <span className="w-2 h-2 rounded-full bg-emerald-300 shadow-[0_0_8px_#6ee7b7] animate-pulse" />
-            <span>{currentSlide.habit}</span>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setDarkMode(!darkMode)}
-            className="inline-flex items-center gap-1.5 bg-white/25 hover:bg-white/40 active:bg-white/50 backdrop-blur-2xl border border-white/40 text-white px-3.5 py-1.5 rounded-full shadow-[0_6px_20px_rgba(0,0,0,0.3)] ring-1 ring-white/30 text-[11px] font-bold transition-all cursor-pointer"
-          >
-            {darkMode ? (
-              <>
-                <Sun className="w-3.5 h-3.5 text-amber-300" />
-                <span>Mode Terang</span>
-              </>
-            ) : (
-              <>
-                <Moon className="w-3.5 h-3.5 text-sky-200" />
-                <span>Mode Gelap</span>
-              </>
-            )}
-          </button>
+      {/* ================= TOP NAVIGATION BAR (FULL WIDTH, CLEAN & PROFESSIONAL) ================= */}
+      <header className="absolute top-0 inset-x-0 z-30 flex items-center justify-between px-5 sm:px-8 py-4 pointer-events-auto">
+        <div className="inline-flex items-center gap-2 bg-slate-950/45 hover:bg-slate-950/60 backdrop-blur-2xl border border-white/25 text-white px-4 py-1.5 rounded-full text-xs font-bold tracking-wide shadow-[0_6px_20px_rgba(0,0,0,0.3)] ring-1 ring-white/15 transition-all">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse" />
+          <span className="text-emerald-300 font-extrabold">7 KAIH</span>
+          <span className="text-white/40">•</span>
+          <span className="text-slate-100 font-medium truncate max-w-[200px] sm:max-w-xs">{currentSlide.habit}</span>
         </div>
 
-        {/* Center-Left Welcome Card (Made Compact So Background is More Expansive - Requirement 1) */}
-        <div className="my-6 lg:my-auto max-w-md">
-          <div className="relative overflow-hidden bg-slate-950/40 backdrop-blur-2xl border border-white/25 rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.6)] ring-1 ring-white/20">
-            {/* Specular glossy highlight */}
-            <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/25 via-white/5 to-transparent pointer-events-none" />
+        <button
+          type="button"
+          onClick={() => setDarkMode(!darkMode)}
+          className="inline-flex items-center gap-1.5 bg-slate-950/45 hover:bg-slate-950/60 active:bg-slate-950/80 backdrop-blur-2xl border border-white/25 text-white px-4 py-1.5 rounded-full shadow-[0_6px_20px_rgba(0,0,0,0.3)] ring-1 ring-white/15 text-xs font-bold transition-all cursor-pointer"
+        >
+          {darkMode ? (
+            <>
+              <Sun className="w-3.5 h-3.5 text-amber-300" />
+              <span>Mode Terang</span>
+            </>
+          ) : (
+            <>
+              <Moon className="w-3.5 h-3.5 text-sky-200" />
+              <span>Mode Gelap</span>
+            </>
+          )}
+        </button>
+      </header>
 
-            <h1 className="relative text-xl sm:text-2xl font-black text-white tracking-tight leading-tight flex items-center gap-2 flex-wrap drop-shadow-md">
-              <span>{config.heroTitle}</span>
-            </h1>
-            <p className="relative mt-2 text-xs sm:text-[13px] text-slate-100/95 leading-relaxed font-normal drop-shadow-sm">
-              {config.heroSubtitle}
-            </p>
-          </div>
-          {/* Note: 3 feature cards (Data Siswa, Mendukung Karakter, Transparan) have been REMOVED per user requirement #4 */}
-        </div>
+      {/* ================= LEFT SECTION: CONSOLIDATED HERO & QUOTE CARD (CLEAN & TIDY) ================= */}
+      <div className="relative z-10 lg:w-[50%] xl:w-[52%] flex flex-col justify-center px-6 sm:px-10 lg:pl-12 lg:pr-6 pt-20 pb-10 min-h-[400px] lg:min-h-screen pointer-events-auto">
+        <div className="max-w-lg w-full">
+          {/* Unified High-End Glossy Hero Card */}
+          <div className="relative overflow-hidden bg-slate-950/45 backdrop-blur-3xl border border-white/30 rounded-3xl p-6 sm:p-8 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] ring-1 ring-white/20 transition-all">
+            {/* Specular Sheen Highlight */}
+            <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-white/25 via-white/5 to-transparent pointer-events-none rounded-t-3xl" />
 
-        {/* Bottom Quote Box (Compact Glossy Box) */}
-        <div className="max-w-sm">
-          <div className="relative overflow-hidden bg-slate-950/40 backdrop-blur-2xl border border-white/25 rounded-xl px-4 py-2.5 shadow-[0_12px_30px_rgba(0,0,0,0.4)] ring-1 ring-white/15">
-            <div className="absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-white/15 to-transparent pointer-events-none" />
-            <p className="relative text-[11px] sm:text-xs italic text-slate-100 leading-snug drop-shadow-sm">
-              "{currentSlide.quote}"
-            </p>
-            <div className="relative mt-1.5 flex items-center justify-between text-[10px] text-amber-300 font-bold">
-              <span className="truncate pr-2">— {currentSlide.title}</span>
-              <div className="flex gap-1 items-center shrink-0">
-                {slides.map((s, idx) => (
-                  <button
-                    key={s.id || idx}
-                    type="button"
-                    onClick={() => setActiveSlideIndex(idx)}
-                    className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                      idx === activeSlideIndex
-                        ? 'w-5 bg-amber-400 shadow-[0_0_8px_#fbbf24]'
-                        : 'w-1.5 bg-white/40 hover:bg-white/80'
-                    }`}
-                    aria-label={`Slide ${idx + 1}`}
-                  />
-                ))}
+            <div className="relative space-y-4">
+              {/* Badge Identitas */}
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 border border-white/25 text-[11px] font-bold text-emerald-300">
+                <span>Perguruan Budi Utomo Binjai</span>
+                <span>•</span>
+                <span className="text-amber-300 font-semibold">Gerakan Karakter Siswa</span>
+              </div>
+
+              {/* Title & Subtitle */}
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight drop-shadow-md">
+                {config.heroTitle}
+              </h1>
+              <p className="text-xs sm:text-[13px] text-slate-200/95 leading-relaxed font-normal drop-shadow-sm">
+                {config.heroSubtitle}
+              </p>
+
+              {/* Divider */}
+              <div className="pt-2 border-t border-white/15" />
+
+              {/* Integrated Slide Quote & Interactive Dots */}
+              <div className="space-y-2 pt-1">
+                <p className="text-xs sm:text-[13px] italic text-amber-200 leading-snug drop-shadow-sm">
+                  "{currentSlide.quote}"
+                </p>
+                <div className="flex items-center justify-between text-[11px] text-white/90 pt-1">
+                  <span className="font-bold text-emerald-300 truncate pr-2">— {currentSlide.title}</span>
+                  <div className="flex gap-1.5 items-center shrink-0">
+                    {slides.map((s, idx) => (
+                      <button
+                        key={s.id || idx}
+                        type="button"
+                        onClick={() => setActiveSlideIndex(idx)}
+                        className={`h-2 rounded-full transition-all cursor-pointer ${
+                          idx === activeSlideIndex
+                            ? 'w-6 bg-amber-400 shadow-[0_0_10px_#fbbf24]'
+                            : 'w-2 bg-white/35 hover:bg-white/80'
+                        }`}
+                        aria-label={`Slide ${idx + 1}`}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

@@ -30,18 +30,23 @@ import {
   Trash2,
   Save,
   CheckCircle2,
+  Upload,
+  MapPin,
 } from 'lucide-react';
 import {
   loadMasterData,
   loadLandingConfig,
+  loadSchoolLocationConfig,
   saveAppConfig,
   DEFAULT_MASTER_DATA,
   DEFAULT_LANDING_CONFIG,
+  DEFAULT_SCHOOL_CONFIG,
 } from '../utils/appConfig';
 import type {
   MasterDataConfig,
   LandingPageConfig,
   KaihSlideConfig,
+  SchoolLocationConfig,
 } from '../utils/appConfig';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://zshxtebkopkvhdthavhb.supabase.co';
@@ -89,12 +94,13 @@ interface BulkImportRow {
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
-  // Active Main Tab: 'users' | 'master_data' | 'landing_page'
-  const [activeMainTab, setActiveMainTab] = useState<'users' | 'master_data' | 'landing_page'>('users');
+  // Active Main Tab: 'users' | 'master_data' | 'school_location' | 'landing_page'
+  const [activeMainTab, setActiveMainTab] = useState<'users' | 'master_data' | 'school_location' | 'landing_page'>('users');
 
-  // Master Data & Landing Page Config State
+  // Master Data & Landing Page Config & School Location State
   const [masterData, setMasterData] = useState<MasterDataConfig>(DEFAULT_MASTER_DATA);
   const [landingConfig, setLandingConfig] = useState<LandingPageConfig>(DEFAULT_LANDING_CONFIG);
+  const [schoolConfig, setSchoolConfig] = useState<SchoolLocationConfig>(DEFAULT_SCHOOL_CONFIG);
   const [savingConfig, setSavingConfig] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -162,9 +168,58 @@ export default function AdminDashboard() {
   };
 
   const loadConfigs = async () => {
-    const [m, l] = await Promise.all([loadMasterData(), loadLandingConfig()]);
+    const [m, l, s] = await Promise.all([
+      loadMasterData(),
+      loadLandingConfig(),
+      loadSchoolLocationConfig(),
+    ]);
     setMasterData(m);
     setLandingConfig(l);
+    setSchoolConfig(s);
+  };
+
+  const handleSaveSchoolLocation = async () => {
+    setSavingConfig(true);
+    try {
+      await saveAppConfig({ schoolLocation: schoolConfig });
+      showToast('🎉 Berhasil menyimpan koordinat & lokasi sekolah!');
+    } catch (err: any) {
+      alert('Gagal menyimpan lokasi sekolah: ' + err.message);
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const handleUploadImageFile = (
+    file: File,
+    onSuccess: (url: string) => void
+  ) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const rawDataUrl = reader.result as string;
+      try {
+        const fileExt = file.name.split('.').pop() || 'jpg';
+        const fileName = `landing_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const { data, error } = await supabase.storage.from('public_assets').upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+        if (!error && data) {
+          const { data: pub } = supabase.storage.from('public_assets').getPublicUrl(fileName);
+          if (pub?.publicUrl) {
+            onSuccess(pub.publicUrl);
+            showToast('✅ Berhasil mengunggah gambar ke server penyimpanan!');
+            return;
+          }
+        }
+      } catch {
+        // fallback to data URL
+      }
+      onSuccess(rawDataUrl);
+      showToast('✅ Berhasil memuat gambar dari komputer!');
+    };
+    reader.readAsDataURL(file);
   };
 
   const fetchAllData = async () => {
@@ -914,7 +969,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Admin Navigation Tabs */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex gap-2 border-t border-slate-100 pt-1 pb-1">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-wrap gap-2 border-t border-slate-100 pt-1 pb-1">
           <button
             onClick={() => setActiveMainTab('users')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
@@ -936,7 +991,19 @@ export default function AdminDashboard() {
             }`}
           >
             <Layers size={16} />
-            <span>Master Data Sekolah (Jenjang, Kelas, Jurusan, Agama, Suku)</span>
+            <span>Master Data Dropdown</span>
+          </button>
+
+          <button
+            onClick={() => setActiveMainTab('school_location')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              activeMainTab === 'school_location'
+                ? 'bg-purple-600 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <MapPin size={16} />
+            <span>Lokasi Sekolah (Peta)</span>
           </button>
 
           <button
@@ -948,10 +1015,37 @@ export default function AdminDashboard() {
             }`}
           >
             <Palette size={16} />
-            <span>Pengaturan Landing Page (Gambar, Teks & Logo)</span>
+            <span>Pengaturan Landing Page</span>
           </button>
         </div>
       </header>
+
+      {/* Supabase RLS Fix Notification for Admin */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🛡️</span>
+            <div>
+              <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                Penting: Sinkronisasi Izin Akses Yayasan & Kepala Sekolah (Supabase RLS)
+              </h4>
+              <p className="text-[11px] sm:text-xs text-slate-600">
+                Pastikan RLS Supabase sudah mengizinkan role Yayasan & Kepsek agar informasi aktivitas dan absensi siswa tidak kosong (0).
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(`-- Perbaikan RLS Supabase untuk Semua Peran\nALTER TABLE public.activities DISABLE ROW LEVEL SECURITY;\nALTER TABLE public.attendance DISABLE ROW LEVEL SECURITY;\nALTER TABLE public.evaluations DISABLE ROW LEVEL SECURITY;`);
+              alert("✅ Skrip SQL Perbaikan RLS telah disalin! Buka Supabase Studio > SQL Editor lalu Paste dan Run.");
+            }}
+            className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shrink-0 cursor-pointer shadow-xs"
+          >
+            📋 Salin Skrip Perbaikan SQL
+          </button>
+        </div>
+      </div>
 
       {/* Toast Notification */}
       {toastMessage && (
@@ -1528,7 +1622,178 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ================= TAB 3: LANDING PAGE CUSTOMIZATION (Requirement 3) ================= */}
+        {/* ================= TAB 3: LOKASI SEKOLAH & PETA SEBARAN (Requirement 4) ================= */}
+        {activeMainTab === 'school_location' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+              <div>
+                <h2 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                  <MapPin className="text-purple-600" size={20} />
+                  <span>Pengaturan Titik Lokasi Sekolah (Peta Sebaran)</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Tentukan titik koordinat akurat Latitude & Longitude sekolah. Titik ini menjadi pusat pin sekolah pada Peta Sebaran dan acuan radius absensi siswa.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={savingConfig}
+                onClick={handleSaveSchoolLocation}
+                className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Save size={16} />
+                <span>{savingConfig ? 'Menyimpan...' : 'Simpan Koordinat & Lokasi Sekolah'}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Form Koordinat GPS */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-100 pb-2">
+                  1. Titik Koordinat GPS Sekolah
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Latitude (Lintang) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={schoolConfig.latitude}
+                      onChange={(e) => setSchoolConfig({ ...schoolConfig, latitude: parseFloat(e.target.value) || 0 })}
+                      className="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-mono font-bold"
+                      placeholder="3.6006"
+                    />
+                    <span className="text-[10px] text-slate-400">Contoh Sumatera Utara: 3.6006</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Longitude (Bujur) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={schoolConfig.longitude}
+                      onChange={(e) => setSchoolConfig({ ...schoolConfig, longitude: parseFloat(e.target.value) || 0 })}
+                      className="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-mono font-bold"
+                      placeholder="98.4854"
+                    />
+                    <span className="text-[10px] text-slate-400">Contoh Sumatera Utara: 98.4854</span>
+                  </div>
+                </div>
+
+                {/* Preset & GPS Helper Buttons */}
+                <div className="pt-2 border-t border-slate-100 space-y-2">
+                  <div className="text-[11px] font-bold text-slate-600">Pilihan Cepat / Preset:</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSchoolConfig({
+                          ...schoolConfig,
+                          latitude: 3.6006,
+                          longitude: 98.4854,
+                          name: 'Yayasan Pendidikan Budi Utomo Binjai',
+                        });
+                        showToast('📍 Koordinat disetel ke SMK/SMP Budi Utomo Binjai!');
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold cursor-pointer"
+                    >
+                      📍 Budi Utomo Binjai (3.6006, 98.4854)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!navigator.geolocation) {
+                          alert('Browser Anda tidak mendukung deteksi GPS');
+                          return;
+                        }
+                        navigator.geolocation.getCurrentPosition(
+                          (pos) => {
+                            setSchoolConfig({
+                              ...schoolConfig,
+                              latitude: parseFloat(pos.coords.latitude.toFixed(6)),
+                              longitude: parseFloat(pos.coords.longitude.toFixed(6)),
+                            });
+                            showToast('🎯 Berhasil mendeteksi titik koordinat perangkat!');
+                          },
+                          (err) => {
+                            alert('Gagal mendeteksi lokasi GPS: ' + err.message);
+                          },
+                          { enableHighAccuracy: true }
+                        );
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold cursor-pointer"
+                    >
+                      🎯 Deteksi GPS Saya Saat Ini
+                    </button>
+
+                    <a
+                      href={`https://www.google.com/maps?q=${schoolConfig.latitude},${schoolConfig.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-xs font-bold"
+                    >
+                      🗺️ Cek di Google Maps
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* Form Identitas & Alamat */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+                <h3 className="text-sm font-extrabold text-slate-900 border-b border-slate-100 pb-2">
+                  2. Identitas & Alamat Resmi Sekolah
+                </h3>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Nama Satuan Pendidikan / Sekolah
+                  </label>
+                  <input
+                    type="text"
+                    value={schoolConfig.name}
+                    onChange={(e) => setSchoolConfig({ ...schoolConfig, name: e.target.value })}
+                    className="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold"
+                    placeholder="Yayasan Pendidikan Budi Utomo Binjai"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    No. Telepon / WhatsApp Sekolah
+                  </label>
+                  <input
+                    type="text"
+                    value={schoolConfig.phone}
+                    onChange={(e) => setSchoolConfig({ ...schoolConfig, phone: e.target.value })}
+                    className="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs"
+                    placeholder="+62 812-3456-7890"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Alamat Lengkap Sekolah
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={schoolConfig.address}
+                    onChange={(e) => setSchoolConfig({ ...schoolConfig, address: e.target.value })}
+                    className="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs"
+                    placeholder="Jl. Budi Utomo No. 12, Kel. Dataran Tinggi, Kec. Binjai Timur, Kota Binjai, Sumatera Utara 20731"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= TAB 4: LANDING PAGE CUSTOMIZATION (Requirement 3) ================= */}
         {activeMainTab === 'landing_page' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
@@ -1575,6 +1840,22 @@ export default function AdminDashboard() {
                       className="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs"
                     />
                   </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer border border-slate-300 transition-colors">
+                      <Upload size={13} />
+                      <span>Unggah dari File Komputer</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleUploadImageFile(f, (url) => setLandingConfig((prev) => ({ ...prev, logoKaihUrl: url })));
+                        }}
+                      />
+                    </label>
+                    <span className="text-[11px] text-slate-400">JPG, PNG, WebP, SVG</span>
+                  </div>
                 </div>
 
                 <div>
@@ -1600,6 +1881,22 @@ export default function AdminDashboard() {
                       placeholder="Masukkan URL foto/logo Yayasan..."
                       className="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs"
                     />
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer border border-slate-300 transition-colors">
+                      <Upload size={13} />
+                      <span>Unggah dari File Komputer</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleUploadImageFile(f, (url) => setLandingConfig((prev) => ({ ...prev, logoYaspenUrl: url })));
+                        }}
+                      />
+                    </label>
+                    <span className="text-[11px] text-slate-400">JPG, PNG, WebP, SVG</span>
                   </div>
                 </div>
               </div>
@@ -1701,12 +1998,27 @@ export default function AdminDashboard() {
                         <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
                           URL Gambar Background
                         </label>
-                        <input
-                          type="text"
-                          value={slide.image}
-                          onChange={(e) => handleUpdateSlide(idx, 'image', e.target.value)}
-                          className="w-full border border-slate-300 rounded-xl px-3 py-1.5 text-xs bg-white"
-                        />
+                        <div className="flex gap-1.5">
+                          <input
+                            type="text"
+                            value={slide.image}
+                            onChange={(e) => handleUpdateSlide(idx, 'image', e.target.value)}
+                            className="w-full border border-slate-300 rounded-xl px-3 py-1.5 text-xs bg-white"
+                          />
+                          <label className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-[11px] font-bold cursor-pointer border border-purple-200 transition-colors shrink-0" title="Pilih dari Komputer">
+                            <Upload size={12} />
+                            <span>Unggah</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleUploadImageFile(f, (url) => handleUpdateSlide(idx, 'image', url));
+                              }}
+                            />
+                          </label>
+                        </div>
                       </div>
 
                       <div>

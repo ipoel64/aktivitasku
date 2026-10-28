@@ -28,6 +28,24 @@ export interface MasterDataConfig {
   suku: string[];
 }
 
+export interface SchoolLocationConfig {
+  name: string;
+  latitude: number;
+  longitude: number;
+  address: string;
+  phone: string;
+  level: string;
+}
+
+export const DEFAULT_SCHOOL_CONFIG: SchoolLocationConfig = {
+  name: 'Perguruan Budi Utomo Binjai (SMP & SMK)',
+  latitude: 3.6062,
+  longitude: 98.4842,
+  address: 'Jl. S. Hasanuddin No. 35, Binjai, Sumatera Utara',
+  phone: '(061) 882-xxxx',
+  level: 'Pusat Kampus Utama',
+};
+
 export const DEFAULT_SLIDES: KaihSlideConfig[] = [
   {
     id: 'slide-1',
@@ -128,6 +146,7 @@ export const DEFAULT_MASTER_DATA: MasterDataConfig = {
 
 const STORAGE_KEY_MASTER = 'BUDI_UTOMO_MASTER_DATA_V2';
 const STORAGE_KEY_LANDING = 'BUDI_UTOMO_LANDING_CONFIG_V2';
+const STORAGE_KEY_SCHOOL = 'BUDI_UTOMO_SCHOOL_LOCATION_V2';
 
 // We use the Super Admin's user profile (or any admin) to sync JSON settings to Supabase
 const KNOWN_ADMIN_ID = '6d106817-03c9-4bc2-a98f-6eb8b6973774';
@@ -135,6 +154,7 @@ const KNOWN_ADMIN_ID = '6d106817-03c9-4bc2-a98f-6eb8b6973774';
 interface AppGlobalPayload {
   masterData?: MasterDataConfig;
   landingConfig?: LandingPageConfig;
+  schoolLocation?: SchoolLocationConfig;
   updated_at?: string;
 }
 
@@ -221,20 +241,63 @@ export async function loadLandingConfig(): Promise<LandingPageConfig> {
 }
 
 /**
- * Saves both master data and landing page configuration to Supabase + localStorage
+ * Loads school location configuration for Map from Supabase / localStorage / defaults
+ */
+export async function loadSchoolLocationConfig(): Promise<SchoolLocationConfig> {
+  try {
+    const local = localStorage.getItem(STORAGE_KEY_SCHOOL);
+    let current: SchoolLocationConfig = local ? JSON.parse(local) : DEFAULT_SCHOOL_CONFIG;
+
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('address')
+      .eq('user_id', KNOWN_ADMIN_ID)
+      .maybeSingle();
+
+    if (data?.address && data.address.startsWith('{')) {
+      try {
+        const parsed: AppGlobalPayload = JSON.parse(data.address);
+        if (parsed.schoolLocation) {
+          current = {
+            name: parsed.schoolLocation.name || DEFAULT_SCHOOL_CONFIG.name,
+            latitude: Number(parsed.schoolLocation.latitude) || DEFAULT_SCHOOL_CONFIG.latitude,
+            longitude: Number(parsed.schoolLocation.longitude) || DEFAULT_SCHOOL_CONFIG.longitude,
+            address: parsed.schoolLocation.address || DEFAULT_SCHOOL_CONFIG.address,
+            phone: parsed.schoolLocation.phone || DEFAULT_SCHOOL_CONFIG.phone,
+            level: parsed.schoolLocation.level || DEFAULT_SCHOOL_CONFIG.level,
+          };
+          localStorage.setItem(STORAGE_KEY_SCHOOL, JSON.stringify(current));
+        }
+      } catch {
+        // use local
+      }
+    }
+    return current;
+  } catch (err) {
+    console.warn('Error loading school location config, using local fallback:', err);
+    const local = localStorage.getItem(STORAGE_KEY_SCHOOL);
+    return local ? JSON.parse(local) : DEFAULT_SCHOOL_CONFIG;
+  }
+}
+
+/**
+ * Saves master data, landing page configuration, and school location to Supabase + localStorage
  */
 export async function saveAppConfig(params: {
   masterData?: MasterDataConfig;
   landingConfig?: LandingPageConfig;
+  schoolLocation?: SchoolLocationConfig;
 }): Promise<void> {
   // Read existing
-  const [existingMaster, existingLanding] = await Promise.all([
+  const [existingMaster, existingLanding, existingSchool] = await Promise.all([
     loadMasterData(),
     loadLandingConfig(),
+    loadSchoolLocationConfig(),
   ]);
 
   const updatedMaster = params.masterData || existingMaster;
   const updatedLanding = params.landingConfig || existingLanding;
+  const updatedSchool = params.schoolLocation || existingSchool;
 
   // 1. Save to local storage
   if (params.masterData) {
@@ -243,11 +306,15 @@ export async function saveAppConfig(params: {
   if (params.landingConfig) {
     localStorage.setItem(STORAGE_KEY_LANDING, JSON.stringify(updatedLanding));
   }
+  if (params.schoolLocation) {
+    localStorage.setItem(STORAGE_KEY_SCHOOL, JSON.stringify(updatedSchool));
+  }
 
   // 2. Save combined payload into admin profile's address column in Supabase
   const payload: AppGlobalPayload = {
     masterData: updatedMaster,
     landingConfig: updatedLanding,
+    schoolLocation: updatedSchool,
     updated_at: new Date().toISOString(),
   };
 

@@ -5,8 +5,14 @@ import {
   ClipboardList, TrendingUp, Users, Map as MapLocationIcon, Activity as ActivityIcon, 
   BarChart2, UserCheck, Save, XCircle, HeartPulse, FileText, 
   Sparkles, ZoomIn, RotateCcw, Phone, User, 
-  Award, School, Home, Briefcase, GraduationCap, Camera, KeyRound, LayoutDashboard, Settings
+  Award, School, Home, Briefcase, GraduationCap, Camera, KeyRound, LayoutDashboard, Settings,
+  Printer
 } from 'lucide-react';
+import {
+  loadSchoolLocationConfig,
+  DEFAULT_SCHOOL_CONFIG,
+  type SchoolLocationConfig,
+} from '../utils/appConfig';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
@@ -49,16 +55,6 @@ const KAIH_CATEGORIES = [
   'Bermasyarakat',
   'Tidur Tepat Waktu'
 ];
-
-// Standby School Location (Perguruan Budi Utomo Binjai)
-const DEFAULT_SCHOOL = {
-  name: 'Perguruan Budi Utomo Binjai (SMP & SMK)',
-  latitude: 3.6062,
-  longitude: 98.4842,
-  address: 'Jl. S. Hasanuddin No. 35, Binjai, Sumatera Utara',
-  phone: '(061) 882-xxxx',
-  level: 'Pusat Kampus Standby',
-};
 
 const formatIndonesianDate = (dateStr: string) => {
   if (!dateStr) return '';
@@ -291,6 +287,11 @@ export default function Dashboard() {
   const [bulkComment, setBulkComment] = useState('');
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
 
+  // School Location Config & Ranking Report State (Issue 4 & Issue 6)
+  const [schoolLocation, setSchoolLocation] = useState<SchoolLocationConfig>(DEFAULT_SCHOOL_CONFIG);
+  const [isRankingReportOpen, setIsRankingReportOpen] = useState(false);
+  const [rankingClassFilter, setRankingClassFilter] = useState('Semua');
+
   // Profile Form States
   const [profileForm, setProfileForm] = useState({ fullName: '', photoUrl: '', newPassword: '', confirmPassword: '' });
   const [isProfileSaving, setIsProfileSaving] = useState(false);
@@ -327,6 +328,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
+    loadSchoolLocationConfig().then((cfg) => {
+      if (cfg) setSchoolLocation(cfg);
+    });
   }, []);
 
   useEffect(() => {
@@ -479,6 +483,27 @@ export default function Dashboard() {
       });
       const mergedActs = parseAndDeduplicateWebActivities(rawMerged);
       setAllActivitiesRaw(mergedActs);
+
+      if (selectedStudentForPopup) {
+        const curStudentId = selectedStudentForPopup.student?.id;
+        if (curStudentId) {
+          const freshActs = mergedActs.filter((a: any) => (a.students?.id || a.student_id) === curStudentId);
+          if (freshActs.length > 0) {
+            const evaluatedCount = freshActs.filter((a: any) => a.kaihStatus === 'REALISASI' && a.evaluations && a.evaluations.length > 0).length;
+            const pendingCount = freshActs.filter((a: any) => a.kaihStatus === 'REALISASI' && (!a.evaluations || a.evaluations.length === 0)).length;
+            const realizedCount = freshActs.filter((a: any) => a.kaihStatus === 'REALISASI').length;
+            const plannedCount = freshActs.filter((a: any) => a.kaihStatus === 'RENCANA').length;
+            setSelectedStudentForPopup((prev: any) => prev ? ({
+              ...prev,
+              activities: freshActs,
+              evaluatedCount,
+              pendingCount,
+              realizedCount,
+              plannedCount,
+            }) : null);
+          }
+        }
+      }
     } else if (actError) {
       console.error(actError);
     }
@@ -896,7 +921,7 @@ export default function Dashboard() {
       if (selectedStudentForPopup) {
         setSelectedStudentForPopup((prev: any) => {
           if (!prev) return prev;
-          const updatedActs = prev.activities.map((a: any) => {
+          const updatedActs = (prev.activities || []).map((a: any) => {
             if (a.id === selectedActivity.id) {
               return {
                 ...a,
@@ -905,7 +930,18 @@ export default function Dashboard() {
             }
             return a;
           });
-          return { ...prev, activities: updatedActs };
+          const evaluatedCount = updatedActs.filter((a: any) => a.kaihStatus === 'REALISASI' && a.evaluations && a.evaluations.length > 0).length;
+          const pendingCount = updatedActs.filter((a: any) => a.kaihStatus === 'REALISASI' && (!a.evaluations || a.evaluations.length === 0)).length;
+          const realizedCount = updatedActs.filter((a: any) => a.kaihStatus === 'REALISASI').length;
+          const plannedCount = updatedActs.filter((a: any) => a.kaihStatus === 'RENCANA').length;
+          return {
+            ...prev,
+            activities: updatedActs,
+            evaluatedCount,
+            pendingCount,
+            realizedCount,
+            plannedCount,
+          };
         });
       }
 
@@ -1278,6 +1314,93 @@ export default function Dashboard() {
     return list;
   }, [filteredActivities, students, studentViewMode]);
 
+  // Group studentActivityCards by Class with A-Z sorting (Issue 2)
+  const groupedStudentCards = useMemo(() => {
+    const groups: Record<string, typeof studentActivityCards> = {};
+    studentActivityCards.forEach((card) => {
+      const cls = card.student.kelas || card.student.education_level || 'Kelas Budi Utomo';
+      if (!groups[cls]) groups[cls] = [];
+      groups[cls].push(card);
+    });
+
+    // Urutkan siswa di setiap kelas berdasarkan abjad nama dari A ke Z
+    Object.keys(groups).forEach((cls) => {
+      groups[cls].sort((a, b) => (a.student.name || '').localeCompare(b.student.name || '', 'id'));
+    });
+
+    // Urutkan nama kelas
+    return Object.keys(groups).sort().map((className) => ({
+      className,
+      cards: groups[className],
+    }));
+  }, [studentActivityCards]);
+
+  // Sort attendance students by class and A-Z by name (Issue 2)
+  const sortedAttStudents = useMemo(() => {
+    return [...filteredAttStudents].sort((a, b) => {
+      const classA = a.kelas || a.education_level || 'Kelas Budi Utomo';
+      const classB = b.kelas || b.education_level || 'Kelas Budi Utomo';
+      if (classA !== classB) {
+        return classA.localeCompare(classB, 'id');
+      }
+      return (a.name || '').localeCompare(b.name || '', 'id');
+    });
+  }, [filteredAttStudents]);
+
+  // Ranking & Character Analysis Calculation (Issue 6)
+  const rankingData = useMemo(() => {
+    return students.map((s) => {
+      const studentActs = activities.filter((a) => (a.students?.id || a.student_id) === s.id);
+      const realizedCount = studentActs.filter((a) => a.kaihStatus === 'REALISASI').length;
+
+      const ratings = studentActs
+        .filter((a) => a.evaluations && a.evaluations.length > 0)
+        .map((a) => Number(a.evaluations[0].rating) || 0);
+      const avgRating = ratings.length > 0 ? (ratings.reduce((acc, r) => acc + r, 0) / ratings.length) : 0;
+
+      const rec = attendanceRecords[s.id];
+      let attScore = 75;
+      if (rec?.status === 'Tepat Waktu') attScore = 100;
+      else if (rec?.status === 'Terlambat') attScore = 80;
+      else if (rec?.status === 'Izin') attScore = 70;
+      else if (rec?.status === 'Sakit') attScore = 70;
+      else if (rec?.status === 'Alpha') attScore = 0;
+
+      const kaihScore = Math.min(100, Math.round((realizedCount / 7) * 100));
+      const ratingScore = Math.round((avgRating / 5) * 100);
+      const finalScore = Math.round((kaihScore * 0.4) + (ratingScore * 0.4) + (attScore * 0.2));
+
+      let predicate = 'Cukup';
+      if (finalScore >= 85) predicate = 'Sangat Unggul 🌟';
+      else if (finalScore >= 75) predicate = 'Unggul ⭐';
+      else if (finalScore >= 60) predicate = 'Baik 👍';
+      else predicate = 'Perlu Bimbingan ⚠️';
+
+      return {
+        student: s,
+        realizedCount,
+        avgRating: avgRating.toFixed(1),
+        ratingsCount: ratings.length,
+        attendanceStatus: rec?.status || 'Belum Diabsen',
+        attScore,
+        kaihScore,
+        ratingScore,
+        finalScore,
+        predicate,
+      };
+    })
+    .filter((item) => {
+      if (rankingClassFilter === 'Semua') return true;
+      const cls = item.student.kelas || item.student.education_level || '';
+      return cls === rankingClassFilter;
+    })
+    .sort((a, b) => {
+      if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
+      if (b.realizedCount !== a.realizedCount) return b.realizedCount - a.realizedCount;
+      return (a.student.name || '').localeCompare(b.student.name || '', 'id');
+    });
+  }, [students, activities, attendanceRecords, rankingClassFilter]);
+
   // Activities to display inside popup
   const popupActivities = useMemo(() => {
     if (!selectedStudentForPopup) return [];
@@ -1510,6 +1633,36 @@ export default function Dashboard() {
       setIsBulkEvalOpen(false);
       setBulkRating(0);
       setBulkComment('');
+
+      // Instantly sync the popup counters in state
+      if (selectedStudentForPopup) {
+        setSelectedStudentForPopup((prev: any) => {
+          if (!prev) return prev;
+          const updatedActs = (prev.activities || []).map((a: any) => {
+            const isPending = a.kaihStatus === 'REALISASI' && (!a.evaluations || a.evaluations.length === 0);
+            if (isPending) {
+              return {
+                ...a,
+                evaluations: [{ id: 'bulk-' + Date.now(), rating: bulkRating, comment: bulkComment }]
+              };
+            }
+            return a;
+          });
+          const evaluatedCount = updatedActs.filter((a: any) => a.kaihStatus === 'REALISASI' && a.evaluations && a.evaluations.length > 0).length;
+          const pendingCount = 0;
+          const realizedCount = updatedActs.filter((a: any) => a.kaihStatus === 'REALISASI').length;
+          const plannedCount = updatedActs.filter((a: any) => a.kaihStatus === 'RENCANA').length;
+          return {
+            ...prev,
+            activities: updatedActs,
+            evaluatedCount,
+            pendingCount,
+            realizedCount,
+            plannedCount,
+          };
+        });
+      }
+
       await fetchData();
       alert(`🎉 Berhasil menilai ${pendingActs.length} aktivitas sekaligus!`);
     } catch (e: any) {
@@ -1711,6 +1864,130 @@ export default function Dashboard() {
   </div>
 </body>
 </html>`);
+    printWindow.document.close();
+    setTimeout(() => { printWindow.print(); }, 400);
+  };
+
+  const handlePrintRankingReport = () => {
+    const printWindow = window.open('', '_blank', 'width=950,height=1000');
+    if (!printWindow) return;
+
+    const todayStr = new Date().toLocaleDateString('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    const rowsHtml = rankingData.map((item, idx) => {
+      const rankBadge = idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`;
+      return `
+        <tr>
+          <td style="text-align: center; font-weight: bold;">${rankBadge}</td>
+          <td style="text-align: center;">${item.student.nisn || item.student.nis || '-'}</td>
+          <td><b>${item.student.name}</b></td>
+          <td style="text-align: center;">${item.student.kelas || item.student.education_level || '-'}</td>
+          <td style="text-align: center; font-weight: bold; color: #047857;">${item.realizedCount} / 7</td>
+          <td style="text-align: center; color: #b45309; font-weight: bold;">⭐ ${item.avgRating}</td>
+          <td style="text-align: center;">${item.attendanceStatus}</td>
+          <td style="text-align: center; font-weight: bold; font-size: 13px;">${item.finalScore}</td>
+          <td style="text-align: center; font-weight: bold;">${item.predicate}</td>
+        </tr>
+      `;
+    }).join('');
+
+    printWindow.document.write(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Laporan Resmi Analisis Karakter 7 KAIH & Perangkingan Siswa</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm; }
+    body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; line-height: 1.3; }
+    .kop { display: flex; align-items: center; justify-content: center; border-bottom: 3px double #000; padding-bottom: 8px; margin-bottom: 12px; }
+    .kop-text { text-align: center; flex: 1; }
+    .kop-text h2 { margin: 0; font-size: 15pt; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kop-text h3 { margin: 2px 0; font-size: 13pt; text-transform: uppercase; }
+    .kop-text p { margin: 1px 0; font-size: 9pt; }
+    .title-doc { text-align: center; margin: 14px 0 10px 0; }
+    .title-doc h4 { margin: 0; font-size: 12pt; text-decoration: underline; text-transform: uppercase; }
+    .meta-table { width: 100%; margin-bottom: 12px; font-size: 10pt; }
+    .meta-table td { padding: 2px 4px; }
+    table.data-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 9.5pt; }
+    table.data-table th, table.data-table td { border: 1px solid #333; padding: 6px 8px; }
+    table.data-table th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
+    .ttd-container { margin-top: 35px; display: flex; justify-content: space-between; page-break-inside: avoid; font-size: 10pt; }
+    .ttd-box { width: 220px; text-align: center; }
+    .ttd-line { margin-top: 65px; border-top: 1px solid #333; font-weight: bold; padding-top: 4px; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="kop">
+    <div class="kop-text">
+      <h2>${schoolLocation.name.toUpperCase()}</h2>
+      <h3>LAPORAN EVALUASI & REKAPITULASI KARAKTER 7 KAIH</h3>
+      <p>${schoolLocation.address} ${schoolLocation.phone ? '| Telp: ' + schoolLocation.phone : ''}</p>
+    </div>
+  </div>
+
+  <div class="title-doc">
+    <h4>LAPORAN ANALISIS PRESTASI KARAKTER & PERANGKINGAN SISWA</h4>
+  </div>
+
+  <table class="meta-table">
+    <tr>
+      <td width="20%"><b>Filter Kelas</b></td>
+      <td width="30%">: ${rankingClassFilter === 'Semua' ? 'Seluruh Kelas' : rankingClassFilter}</td>
+      <td width="20%"><b>Tanggal Cetak</b></td>
+      <td width="30%">: ${todayStr}</td>
+    </tr>
+    <tr>
+      <td><b>Total Siswa</b></td>
+      <td>: ${rankingData.length} Orang</td>
+      <td><b>Bobot Evaluasi</b></td>
+      <td>: 7 KAIH (40%) + Bintang Guru (40%) + Presensi (20%)</td>
+    </tr>
+  </table>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th width="8%">Rank</th>
+        <th width="12%">NISN</th>
+        <th width="24%">Nama Siswa</th>
+        <th width="12%">Kelas</th>
+        <th width="10%">7 KAIH</th>
+        <th width="10%">Guru ⭐</th>
+        <th width="10%">Presensi</th>
+        <th width="8%">Skor</th>
+        <th width="16%">Predikat</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+
+  <div class="ttd-container">
+    <div class="ttd-box">
+      <p>Mengetahui,</p>
+      <p><b>Kepala Sekolah</b></p>
+      <div class="ttd-line">Drs. H. Syahrul, M.Pd</div>
+      <p style="font-size: 8.5pt; margin-top: 2px;">NIP. 19680512 199303 1 004</p>
+    </div>
+
+    <div class="ttd-box">
+      <p>Binjai, ${todayStr}</p>
+      <p><b>Koordinator Karakter 7 KAIH</b></p>
+      <div class="ttd-line">${teacherProfile?.full_name || 'Pembina Karakter Siswa'}</div>
+      <p style="font-size: 8.5pt; margin-top: 2px;">Guru Pembina / Wali Kelas</p>
+    </div>
+  </div>
+</body>
+</html>`);
+
     printWindow.document.close();
     setTimeout(() => { printWindow.print(); }, 400);
   };
@@ -1994,6 +2271,17 @@ export default function Dashboard() {
                 </div>
               );
             })()}
+
+            {/* Tombol Laporan Analisa & Perangkingan Siswa (Issue 6) */}
+            <button
+              type="button"
+              onClick={() => setIsRankingReportOpen(true)}
+              className="clay-btn-coral px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0"
+              title="Buka Laporan Analisa & Perangkingan Karakter Siswa Lengkap"
+            >
+              <Award size={14} />
+              <span>Laporan Analisa & Ranking</span>
+            </button>
           </div>
 
           {/* Mobile Tab Pill Scroller */}
@@ -2036,6 +2324,33 @@ export default function Dashboard() {
             </button>
           </div>
         </header>
+
+        {/* Supabase RLS Fix Alert Banner for Monitoring Accounts (Issue 5) */}
+        {allActivitiesRaw.length === 0 && students.length > 0 && isReadOnly && (
+          <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-amber-950">
+                  Data Aktivitas/Absensi Tampil Nol (0) untuk Peran {currentUserRole.toUpperCase()}
+                </h4>
+                <p className="text-[11px] text-amber-800">
+                  Supabase Row Level Security (RLS) pada server membatasi akses query hanya untuk guru. Jalankan skrip perbaikan SQL di Supabase SQL Editor agar Yayasan & Kepsek dapat melihat seluruh data.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(`ALTER TABLE public.activities DISABLE ROW LEVEL SECURITY;\nALTER TABLE public.attendance DISABLE ROW LEVEL SECURITY;\nALTER TABLE public.evaluations DISABLE ROW LEVEL SECURITY;`);
+                alert("✅ Skrip SQL Perbaikan RLS telah disalin! Paste dan jalankan di Supabase Studio SQL Editor.");
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 cursor-pointer shadow-xs"
+            >
+              📋 Salin Skrip Perbaikan SQL
+            </button>
+          </div>
+        )}
 
         {/* ================= TAB 0: DASHBOARD ================= */}
         {activeTab === 'dashboard' && (() => {
@@ -2419,7 +2734,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Student Cards Grid */}
+            {/* Student Cards Grid Grouped By Class with A-Z sorting (Issue 2 & Issue 3) */}
             {studentActivityCards.length === 0 ? (
               <div className="clay-box p-10 text-center border-dashed">
                 <Search size={32} className="mx-auto text-slate-300 mb-2" />
@@ -2430,85 +2745,102 @@ export default function Dashboard() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5">
-                {studentActivityCards.map((card) => {
-                  const hasActs = card.activities.length > 0;
-                  const studentName = card.student.name || 'Siswa';
-                  const studentPhoto = card.student.photo_url || null;
-
-                  return (
-                    <div
-                      key={card.student.id}
-                      onClick={() => openStudentActivitiesPopup(card)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openStudentActivitiesPopup(card); } }}
-                      title="Klik untuk membuka penilaian aktivitas"
-                      className="clay-box p-2.5 hover:-translate-y-0.5 transition-all flex items-center gap-3 group cursor-pointer"
-                    >
-                      {/* Foto siswa (diperbesar) */}
-                      <div className="relative shrink-0">
-                        {studentPhoto ? (
-                          <img
-                            src={studentPhoto}
-                            alt={studentName}
-                            className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-sm ring-2 ring-emerald-100"
-                          />
-                        ) : (
-                          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-teal-400 to-emerald-600 text-white font-black text-lg flex items-center justify-center border-2 border-white shadow-sm ring-2 ring-emerald-100">
-                            {getInitials(studentName)}
-                          </div>
-                        )}
-                        {card.pendingCount > 0 && (
-                          <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-amber-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white shadow-xs">
-                            {card.pendingCount}
-                          </span>
-                        )}
+              <div className="space-y-6">
+                {groupedStudentCards.map(({ className, cards }) => (
+                  <div key={className} className="space-y-2.5">
+                    {/* Pembatas Antar Kelas */}
+                    <div className="flex items-center justify-between bg-white/80 backdrop-blur-xs px-3.5 py-2 rounded-2xl border border-slate-200 shadow-2xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                        <h3 className="font-extrabold text-slate-900 text-xs sm:text-sm">
+                          🏫 Kelas: {className}
+                        </h3>
+                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          {cards.length} Siswa
+                        </span>
                       </div>
-
-                      {/* Info ringkas */}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-1.5">
-                          <h4 className="font-bold text-slate-900 text-xs sm:text-[13px] leading-snug group-hover:text-emerald-700 transition-colors line-clamp-1">
-                            {studentName}
-                          </h4>
-                          <span className="text-[9px] text-slate-400 font-medium shrink-0 mt-0.5">
-                            {card.latestDate ? formatIndonesianDate(card.latestDate).split(',')[0] : ''}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-slate-500 font-medium truncate">
-                          {card.student.kelas || card.student.education_level || 'Kelas Budi Utomo'}
-                          {card.student.jurusan && card.student.jurusan !== '-' && ` • ${card.student.jurusan}`}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-1 mt-1.5">
-                          {hasActs ? (
-                            <>
-                              <span className="text-[9px] font-bold bg-[#E7F3EC] text-[#245D43] px-1.5 py-0.5 rounded-md border border-[#D5EADF]">
-                                ✅ {card.realizedCount}
-                              </span>
-                              <span className="text-[9px] font-bold bg-[#FEEFEA] text-[#A64539] px-1.5 py-0.5 rounded-md border border-[#FCDDD3]">
-                                📅 {card.plannedCount}
-                              </span>
-                              {card.pendingCount > 0 ? (
-                                <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">
-                                  Perlu Nilai
-                                </span>
-                              ) : card.realizedCount > 0 ? (
-                                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md">
-                                  Dinilai
-                                </span>
-                              ) : null}
-                            </>
-                          ) : (
-                            <span className="text-[9px] font-semibold text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded-md">
-                              Belum ada aktivitas
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium">Urutan Nama A - Z</span>
                     </div>
-                  );
-                })}
+
+                    {/* 4 Kolom Grid Responsif */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-2.5">
+                      {cards.map((card) => {
+                        const hasActs = card.activities.length > 0;
+                        const studentName = card.student.name || 'Siswa';
+                        const studentPhoto = card.student.photo_url || null;
+
+                        return (
+                          <div
+                            key={card.student.id}
+                            onClick={() => openStudentActivitiesPopup(card)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openStudentActivitiesPopup(card); } }}
+                            title="Klik untuk membuka penilaian aktivitas"
+                            className="clay-box p-2.5 hover:-translate-y-0.5 transition-all flex items-center gap-2.5 group cursor-pointer"
+                          >
+                            {/* Foto siswa ringkas agar 4 kolom muat pas */}
+                            <div className="relative shrink-0">
+                              {studentPhoto ? (
+                                <img
+                                  src={studentPhoto}
+                                  alt={studentName}
+                                  className="w-12 h-12 rounded-2xl object-cover border-2 border-white shadow-2xs ring-2 ring-emerald-100"
+                                />
+                              ) : (
+                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-400 to-emerald-600 text-white font-black text-sm flex items-center justify-center border-2 border-white shadow-2xs ring-2 ring-emerald-100">
+                                  {getInitials(studentName)}
+                                </div>
+                              )}
+                              {card.pendingCount > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-4.5 h-4.5 px-1 bg-amber-500 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white shadow-xs">
+                                  {card.pendingCount}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Info ringkas */}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-1">
+                                <h4 className="font-bold text-slate-900 text-xs leading-snug group-hover:text-emerald-700 transition-colors truncate">
+                                  {studentName}
+                                </h4>
+                              </div>
+                              <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
+                                {card.student.kelas || card.student.education_level || 'Kelas Budi Utomo'}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-1 mt-1">
+                                {hasActs ? (
+                                  <>
+                                    <span className="text-[9px] font-bold bg-[#E7F3EC] text-[#245D43] px-1.5 py-0.5 rounded-md border border-[#D5EADF]">
+                                      ✅ {card.realizedCount}
+                                    </span>
+                                    <span className="text-[9px] font-bold bg-[#FEEFEA] text-[#A64539] px-1.5 py-0.5 rounded-md border border-[#FCDDD3]">
+                                      📅 {card.plannedCount}
+                                    </span>
+                                    {card.pendingCount > 0 ? (
+                                      <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.5 rounded-md">
+                                        Perlu Nilai
+                                      </span>
+                                    ) : card.realizedCount > 0 ? (
+                                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1 py-0.5 rounded-md">
+                                        Dinilai
+                                      </span>
+                                    ) : null}
+                                  </>
+                                ) : (
+                                  <span className="text-[9px] font-semibold text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded-md">
+                                    Belum ada aktivitas
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </section>
@@ -2636,90 +2968,116 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium">
-                    {filteredAttStudents.map((s) => {
+                    {sortedAttStudents.map((s, idx) => {
                       const rec = attendanceRecords[s.id] || { status: '', notes: '', time: selectedTime };
+                      const currentClass = s.kelas || s.education_level || 'Kelas Budi Utomo';
+                      const prevStudent = idx > 0 ? sortedAttStudents[idx - 1] : null;
+                      const prevClass = prevStudent ? (prevStudent.kelas || prevStudent.education_level || 'Kelas Budi Utomo') : null;
+                      const isNewClass = idx === 0 || currentClass !== prevClass;
+                      const classStudentsCount = sortedAttStudents.filter((st) => (st.kelas || st.education_level || 'Kelas Budi Utomo') === currentClass).length;
+
                       return (
-                        <tr key={s.id} className="hover:bg-[#FAF8F5]/80 transition-colors">
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-2.5">
-                              {s.photo_url ? (
-                                <img src={s.photo_url} alt={s.name} className="w-7 h-7 rounded-full object-cover border border-slate-200" />
+                        <React.Fragment key={s.id}>
+                          {isNewClass && (
+                            <tr className="bg-gradient-to-r from-emerald-100/90 via-teal-50 to-slate-50 border-y-2 border-emerald-300">
+                              <td colSpan={isReadOnly ? 4 : 5} className="px-4 py-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+                                    <span className="font-extrabold text-emerald-950 text-xs sm:text-[13px] tracking-wide">
+                                      🏫 Kelas: {currentClass}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-emerald-800 bg-white/90 px-2 py-0.5 rounded-md border border-emerald-200">
+                                      {classStudentsCount} Siswa
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] text-slate-500 font-medium">Urutan Nama A - Z</span>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          <tr className="hover:bg-[#FAF8F5]/80 transition-colors">
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-2.5">
+                                {s.photo_url ? (
+                                  <img src={s.photo_url} alt={s.name} className="w-7 h-7 rounded-full object-cover border border-slate-200" />
+                                ) : (
+                                  <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-800 font-black text-[11px] flex items-center justify-center">
+                                    {getInitials(s.name)}
+                                  </div>
+                                )}
+                                <span className="font-bold text-slate-800 text-xs">{s.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5">
+                              {isReadOnly ? (
+                                <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-bold ${
+                                  rec.status === 'Tepat Waktu' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                  rec.status === 'Terlambat' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                                  rec.status === 'Izin' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                                  rec.status === 'Sakit' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                                  rec.status === 'Alpha' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                                  'bg-slate-100 text-slate-500'
+                                }`}>
+                                  {rec.status || 'Belum Diabsen'}
+                                </span>
                               ) : (
-                                <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-800 font-black text-[11px] flex items-center justify-center">
-                                  {getInitials(s.name)}
+                                <div className="flex flex-wrap gap-1">
+                                  {ATTENDANCE_STATUSES.map(st => (
+                                    <button
+                                      key={st.value}
+                                      type="button"
+                                      onClick={() => handleStatusChange(s.id, st.value)}
+                                      className={`px-2 py-0.5 rounded-md text-[9px] font-bold transition-all cursor-pointer ${
+                                        rec.status === st.value
+                                          ? `${st.color} shadow-xs scale-105`
+                                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                      }`}
+                                    >
+                                      {st.label}
+                                    </button>
+                                  ))}
                                 </div>
                               )}
-                              <span className="font-bold text-slate-800 text-xs">{s.name}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5">
-                            {isReadOnly ? (
-                              <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-bold ${
-                                rec.status === 'Tepat Waktu' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                                rec.status === 'Terlambat' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                                rec.status === 'Izin' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
-                                rec.status === 'Sakit' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
-                                rec.status === 'Alpha' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
-                                'bg-slate-100 text-slate-500'
-                              }`}>
-                                {rec.status || 'Belum Diabsen'}
-                              </span>
-                            ) : (
-                              <div className="flex flex-wrap gap-1">
-                                {ATTENDANCE_STATUSES.map(st => (
-                                  <button
-                                    key={st.value}
-                                    type="button"
-                                    onClick={() => handleStatusChange(s.id, st.value)}
-                                    className={`px-2 py-0.5 rounded-md text-[9px] font-bold transition-all cursor-pointer ${
-                                      rec.status === st.value
-                                        ? `${st.color} shadow-xs scale-105`
-                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                    }`}
-                                  >
-                                    {st.label}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            {isReadOnly ? (
-                              <span className="text-xs font-mono font-bold text-slate-700">{rec.time || '--:--'}</span>
-                            ) : (
-                              <input
-                                type="time"
-                                value={rec.time || selectedTime}
-                                onChange={(e) => handleTimeChange(s.id, e.target.value)}
-                                className="px-1.5 py-0.5 bg-[#FAF8F5] border border-slate-200 rounded text-xs font-bold focus:outline-none"
-                              />
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            {isReadOnly ? (
-                              <span className="text-xs text-slate-600 italic">{rec.notes || '-'}</span>
-                            ) : (
-                              <input
-                                type="text"
-                                placeholder="Catatan..."
-                                value={rec.notes || ''}
-                                onChange={(e) => handleNotesChange(s.id, e.target.value)}
-                                className="w-full px-2 py-0.5 bg-white border border-slate-200 rounded text-xs focus:outline-none"
-                              />
-                            )}
-                          </td>
-                          {!isReadOnly && (
-                            <td className="px-4 py-2.5 text-right">
-                              <button
-                                onClick={() => saveSingleStudentAttendance(s)}
-                                disabled={savingStudentId === s.id}
-                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-2xs transition-all disabled:opacity-50 cursor-pointer"
-                              >
-                                {savingStudentId === s.id ? 'Menyimpan...' : 'Simpan'}
-                              </button>
                             </td>
-                          )}
-                        </tr>
+                            <td className="px-4 py-2.5">
+                              {isReadOnly ? (
+                                <span className="text-xs font-mono font-bold text-slate-700">{rec.time || '--:--'}</span>
+                              ) : (
+                                <input
+                                  type="time"
+                                  value={rec.time || selectedTime}
+                                  onChange={(e) => handleTimeChange(s.id, e.target.value)}
+                                  className="px-1.5 py-0.5 bg-[#FAF8F5] border border-slate-200 rounded text-xs font-bold focus:outline-none"
+                                />
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              {isReadOnly ? (
+                                <span className="text-xs text-slate-600 italic">{rec.notes || '-'}</span>
+                              ) : (
+                                <input
+                                  type="text"
+                                  placeholder="Catatan..."
+                                  value={rec.notes || ''}
+                                  onChange={(e) => handleNotesChange(s.id, e.target.value)}
+                                  className="w-full px-2 py-0.5 bg-white border border-slate-200 rounded text-xs focus:outline-none"
+                                />
+                              )}
+                            </td>
+                            {!isReadOnly && (
+                              <td className="px-4 py-2.5 text-right">
+                                <button
+                                  onClick={() => saveSingleStudentAttendance(s)}
+                                  disabled={savingStudentId === s.id}
+                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-2xs transition-all disabled:opacity-50 cursor-pointer"
+                                >
+                                  {savingStudentId === s.id ? 'Menyimpan...' : 'Simpan'}
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
@@ -2962,37 +3320,42 @@ export default function Dashboard() {
             {/* Map Container */}
             <div id="map-view-container" className="h-[420px] lg:h-[calc(100vh-190px)] lg:min-h-[480px] w-full rounded-2xl overflow-hidden border border-[#ECE7DE] relative z-0 shadow-sm">
               <MapContainer 
-                center={[DEFAULT_SCHOOL.latitude, DEFAULT_SCHOOL.longitude]} 
+                center={[schoolLocation.latitude, schoolLocation.longitude]} 
                 zoom={12} 
                 style={{ height: '100%', width: '100%' }}
               >
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 <FlyToLocation targetLoc={flyTarget ? { lat: flyTarget.lat, lng: flyTarget.lng } : null} />
                 
-                {/* 1. STANDBY SCHOOL PIN (REQUIREMENT 2) */}
+                {/* 1. STANDBY SCHOOL PIN (REQUIREMENT 2 & 4) */}
                 <Marker 
-                  position={[DEFAULT_SCHOOL.latitude, DEFAULT_SCHOOL.longitude]}
+                  position={[schoolLocation.latitude, schoolLocation.longitude]}
                   icon={getSchoolDivIcon()}
                   zIndexOffset={1000}
                 >
                   <Popup>
                     <div className="p-1 min-w-[200px] font-sans">
                       <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-100">
-                        <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg shadow-sm">
+                        <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center text-lg shadow-sm">
                           🏫
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900 text-xs leading-tight">{DEFAULT_SCHOOL.name}</p>
-                          <span className="text-[9px] text-amber-800 font-bold bg-amber-100 px-1.5 py-0.5 rounded">
-                            ● {DEFAULT_SCHOOL.level}
+                          <p className="font-bold text-slate-900 text-xs leading-tight">{schoolLocation.name}</p>
+                          <span className="text-[9px] text-purple-800 font-bold bg-purple-100 px-1.5 py-0.5 rounded">
+                            ● {schoolLocation.level || 'Pusat Kampus'}
                           </span>
                         </div>
                       </div>
                       <p className="text-[11px] text-slate-700 font-medium leading-snug">
-                        📍 {DEFAULT_SCHOOL.address}
+                        📍 {schoolLocation.address}
                       </p>
+                      {schoolLocation.phone && (
+                        <p className="text-[10px] text-slate-600 mt-1">
+                          📞 {schoolLocation.phone}
+                        </p>
+                      )}
                       <p className="text-[10px] text-slate-500 mt-1">
-                        Koordinat: {DEFAULT_SCHOOL.latitude}, {DEFAULT_SCHOOL.longitude}
+                        Koordinat: {schoolLocation.latitude}, {schoolLocation.longitude}
                       </p>
                     </div>
                   </Popup>
@@ -4000,6 +4363,231 @@ export default function Dashboard() {
                 >
                   Tutup
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL LAPORAN ANALISA SISWA & PERANGKINGAN (Issue 6) ================= */}
+      {isRankingReportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-5xl w-full p-5 sm:p-7 shadow-2xl border border-slate-100 my-6 max-h-[92vh] overflow-y-auto space-y-5">
+            {/* Modal Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center font-black shadow-md">
+                  <Award size={26} />
+                </div>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900">
+                    Laporan Analisis Karakter & Perangkingan Siswa
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Perangkingan komprehensif berdasarkan 7 KAIH (40%), Penilaian Guru (40%), dan Presensi (20%)
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-center">
+                <button
+                  type="button"
+                  onClick={handlePrintRankingReport}
+                  className="clay-btn-coral px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Printer size={15} />
+                  <span>Cetak Dokumen PDF Resmi</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsRankingReportOpen(false)}
+                  className="p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Kelas & Ringkasan Metrik */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-700">Filter Kelas:</span>
+                <select
+                  value={rankingClassFilter}
+                  onChange={(e) => setRankingClassFilter(e.target.value)}
+                  className="bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800"
+                >
+                  <option value="Semua">Semua Kelas ({students.length} Siswa)</option>
+                  {Array.from(new Set(students.map((s) => s.kelas).filter(Boolean))).map((cls) => (
+                    <option key={cls} value={cls}>Kelas {cls}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-3 text-xs">
+                <span className="font-bold text-slate-600">
+                  Total: <b className="text-emerald-700 font-black">{rankingData.length}</b> Siswa Teranalisis
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="font-bold text-slate-600">
+                  Rata-rata Skor: <b className="text-blue-700 font-black">{Math.round(rankingData.reduce((acc, r) => acc + r.finalScore, 0) / (rankingData.length || 1))}</b> / 100
+                </span>
+              </div>
+            </div>
+
+            {/* Podium 3 Besar Juara Karakter */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+              {/* Juara 2 (Perak) */}
+              {rankingData[1] && (
+                <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-100 via-slate-50 to-white border-2 border-slate-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1">
+                  <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-slate-400 text-white font-black text-xs shadow-xs">
+                    🥈 JUARA 2
+                  </span>
+                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-slate-300 shadow-xs mt-2 mb-2">
+                    {rankingData[1].student.photo_url ? (
+                      <img src={rankingData[1].student.photo_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-slate-300 text-slate-700 font-black flex items-center justify-center">
+                        {getInitials(rankingData[1].student.name)}
+                      </div>
+                    )}
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-full">{rankingData[1].student.name}</h4>
+                  <p className="text-[11px] text-slate-500">{rankingData[1].student.kelas || 'Siswa'}</p>
+                  <div className="mt-2 text-xs font-black text-slate-700 bg-slate-200/80 px-3 py-1 rounded-xl">
+                    Skor: {rankingData[1].finalScore} / 100
+                  </div>
+                </div>
+              )}
+
+              {/* Juara 1 (Emas) */}
+              {rankingData[0] && (
+                <div className="p-5 rounded-2xl bg-gradient-to-b from-amber-100 via-amber-50 to-white border-2 border-amber-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105">
+                  <span className="absolute -top-3.5 px-3.5 py-1 rounded-full bg-gradient-to-r from-amber-500 to-yellow-500 text-white font-black text-xs shadow-xs">
+                    🥇 JUARA 1 UTAMA
+                  </span>
+                  <div className="w-20 h-20 rounded-full overflow-hidden border-3 border-amber-400 shadow-md mt-2 mb-2 ring-4 ring-amber-200">
+                    {rankingData[0].student.photo_url ? (
+                      <img src={rankingData[0].student.photo_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-amber-400 text-amber-900 font-black text-xl flex items-center justify-center">
+                        {getInitials(rankingData[0].student.name)}
+                      </div>
+                    )}
+                  </div>
+                  <h4 className="font-black text-slate-900 text-base truncate max-w-full">{rankingData[0].student.name}</h4>
+                  <p className="text-xs font-bold text-amber-800">{rankingData[0].student.kelas || 'Siswa'}</p>
+                  <div className="mt-2 text-sm font-black text-amber-900 bg-amber-200/90 px-4 py-1.5 rounded-2xl border border-amber-300">
+                    Skor Tertinggi: {rankingData[0].finalScore} / 100
+                  </div>
+                </div>
+              )}
+
+              {/* Juara 3 (Perunggu) */}
+              {rankingData[2] && (
+                <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-50/60 via-orange-50/30 to-white border-2 border-amber-600/40 shadow-xs flex flex-col items-center text-center relative order-3">
+                  <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-amber-700 text-white font-black text-xs shadow-xs">
+                    🥉 JUARA 3
+                  </span>
+                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-600/50 shadow-xs mt-2 mb-2">
+                    {rankingData[2].student.photo_url ? (
+                      <img src={rankingData[2].student.photo_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-amber-700/20 text-amber-900 font-black flex items-center justify-center">
+                        {getInitials(rankingData[2].student.name)}
+                      </div>
+                    )}
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-full">{rankingData[2].student.name}</h4>
+                  <p className="text-[11px] text-slate-500">{rankingData[2].student.kelas || 'Siswa'}</p>
+                  <div className="mt-2 text-xs font-black text-amber-800 bg-amber-100/80 px-3 py-1 rounded-xl">
+                    Skor: {rankingData[2].finalScore} / 100
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Grafik Top 10 Siswa */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
+              <h4 className="text-xs font-extrabold text-slate-900">
+                📊 Grafik Perbandingan Skor Karakter Top 10 Siswa
+              </h4>
+              <div className="h-56 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={rankingData.slice(0, 10).map((r) => ({ name: r.student.name.split(' ')[0], skor: r.finalScore, realisasi: r.realizedCount }))}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 'bold' }} stroke="#64748B" />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="#64748B" />
+                    <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                    <Bar dataKey="skor" name="Skor Karakter" fill="#F59E0B" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Tabel Peringkat Lengkap */}
+            <div className="border border-slate-200 rounded-2xl overflow-hidden">
+              <div className="max-h-80 overflow-y-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 font-extrabold sticky top-0">
+                    <tr>
+                      <th className="px-3.5 py-2.5 text-center">Rank</th>
+                      <th className="px-3.5 py-2.5">Siswa</th>
+                      <th className="px-3.5 py-2.5">Kelas</th>
+                      <th className="px-3.5 py-2.5 text-center">7 KAIH</th>
+                      <th className="px-3.5 py-2.5 text-center">Guru ⭐</th>
+                      <th className="px-3.5 py-2.5 text-center">Presensi</th>
+                      <th className="px-3.5 py-2.5 text-center">Skor Akhir</th>
+                      <th className="px-3.5 py-2.5 text-center">Predikat</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {rankingData.map((item, idx) => (
+                      <tr key={item.student.id} className="hover:bg-amber-50/40 transition-colors">
+                        <td className="px-3.5 py-2.5 text-center font-black">
+                          {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`}
+                        </td>
+                        <td className="px-3.5 py-2.5">
+                          <div className="flex items-center gap-2">
+                            {item.student.photo_url ? (
+                              <img src={item.student.photo_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center">
+                                {getInitials(item.student.name)}
+                              </div>
+                            )}
+                            <div>
+                              <span className="font-bold text-slate-900 block">{item.student.name}</span>
+                              <span className="text-[10px] text-slate-400">NISN: {item.student.nisn || '-'}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3.5 py-2.5 text-slate-700">{item.student.kelas || '-'}</td>
+                        <td className="px-3.5 py-2.5 text-center font-bold text-emerald-700">
+                          {item.realizedCount} / 7
+                        </td>
+                        <td className="px-3.5 py-2.5 text-center font-bold text-amber-700">
+                          ⭐ {item.avgRating}
+                        </td>
+                        <td className="px-3.5 py-2.5 text-center">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700">
+                            {item.attendanceStatus}
+                          </span>
+                        </td>
+                        <td className="px-3.5 py-2.5 text-center">
+                          <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-amber-100 text-amber-900 border border-amber-200">
+                            {item.finalScore}
+                          </span>
+                        </td>
+                        <td className="px-3.5 py-2.5 text-center">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            {item.predicate}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
