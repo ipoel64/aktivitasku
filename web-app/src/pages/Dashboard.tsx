@@ -1920,6 +1920,37 @@ export default function Dashboard() {
     setIsStudentPopupOpen(true);
   };
 
+  const openStudentActivitiesFromRanking = (student: any) => {
+    if (!student) return;
+    const existingCard = studentActivityCards.find(c => c.student.id === student.id);
+    if (existingCard) {
+      setSelectedStudentForPopup(existingCard);
+      setPopupFilterStatus('Semua');
+      setIsStudentPopupOpen(true);
+      return;
+    }
+
+    const studentActs = allActivitiesRaw.filter((a) => (a.students?.id || a.student_id) === student.id);
+    const realizedCount = studentActs.filter((a) => a.kaihStatus === 'REALISASI').length;
+    const plannedCount = studentActs.filter((a) => a.kaihStatus === 'RENCANA').length;
+    const evaluatedCount = studentActs.filter((a) => a.kaihStatus === 'REALISASI' && a.evaluations && a.evaluations.length > 0).length;
+    const pendingCount = studentActs.filter((a) => a.kaihStatus === 'REALISASI' && (!a.evaluations || a.evaluations.length === 0)).length;
+
+    const card = {
+      student,
+      activities: studentActs,
+      realizedCount,
+      plannedCount,
+      evaluatedCount,
+      pendingCount,
+      latestDate: '',
+      latestActivity: null
+    };
+    setSelectedStudentForPopup(card);
+    setPopupFilterStatus('Semua');
+    setIsStudentPopupOpen(true);
+  };
+
   const handleBulkEvaluate = async () => {
     if (isReadOnly) return;
     if (bulkRating === 0) { alert('Silakan pilih rating bintang terlebih dahulu.'); return; }
@@ -4555,7 +4586,7 @@ export default function Dashboard() {
 
       {/* ================= JENDELA POPUP SELURUH AKTIVITAS SISWA ================= */}
       {isStudentPopupOpen && selectedStudentForPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[65] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="absolute inset-0" onClick={() => setIsStudentPopupOpen(false)}></div>
           
           <div className="relative clay-box max-w-3xl w-full max-h-[88vh] flex flex-col overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-150">
@@ -4724,6 +4755,27 @@ export default function Dashboard() {
                                 {act.description ? ` • ${act.description}` : ''}
                                 {act.location_name ? ` • 📍 ${act.location_name}` : ''}
                               </p>
+                              {act.plannedTime && act.kaihStatus === 'REALISASI' && (
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[9px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                    Rencana: {act.plannedTime}
+                                  </span>
+                                  {(() => {
+                                    const disc = getDisciplineInfo(act);
+                                    return (
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
+                                        disc.level === 'high'
+                                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                          : disc.level === 'mid'
+                                          ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                          : 'bg-rose-50 text-rose-700 border-rose-200'
+                                      }`}>
+                                        {disc.label} {disc.delta !== null && disc.delta > 0 ? `(+${disc.delta}m)` : ''}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
+                              )}
                               {evalData?.comment && (
                                 <p className="text-[10px] text-amber-800 italic truncate" title={evalData.comment}>"{evalData.comment}"</p>
                               )}
@@ -4861,7 +4913,7 @@ export default function Dashboard() {
 
       {/* ================= MODAL PENILAIAN GURU ================= */}
       {isModalOpen && selectedActivity && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-xs">
           <div className="absolute inset-0" onClick={() => !isSubmitting && setIsModalOpen(false)}></div>
           
           <div className="relative clay-box w-full max-w-md overflow-hidden flex flex-col z-10 animate-in fade-in zoom-in-95 duration-150">
@@ -5190,7 +5242,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                   {/* Juara 2 (Perak) */}
                   {rankingData[1] && (
-                    <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-100 via-slate-50 to-white border-2 border-slate-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1">
+                    <div onClick={() => openStudentActivitiesFromRanking(rankingData[1].student)} className="p-4 rounded-2xl bg-gradient-to-b from-slate-100 via-slate-50 to-white border-2 border-slate-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1 cursor-pointer hover:border-amber-400 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
                       <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-slate-400 text-white font-black text-xs shadow-xs">
                         🥈 JUARA 2
                       </span>
@@ -5208,12 +5260,15 @@ export default function Dashboard() {
                       <div className="mt-2 text-xs font-black text-slate-700 bg-slate-200/80 px-3 py-1 rounded-xl">
                         Skor: {rankingData[1].finalScore} / 100
                       </div>
+                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full group-hover:bg-amber-500 group-hover:text-white transition-colors">
+                        👁️ Rincian Kegiatan
+                      </span>
                     </div>
                   )}
 
                   {/* Juara 1 (Emas) */}
                   {rankingData[0] && (
-                    <div className="p-5 rounded-2xl bg-gradient-to-b from-amber-100 via-amber-50 to-white border-2 border-amber-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105">
+                    <div onClick={() => openStudentActivitiesFromRanking(rankingData[0].student)} className="p-5 rounded-2xl bg-gradient-to-b from-amber-100 via-amber-50 to-white border-2 border-amber-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105 cursor-pointer hover:ring-8 hover:ring-amber-200/60 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
                       <span className="absolute -top-3.5 px-3.5 py-1 rounded-full bg-gradient-to-r from-amber-500 to-yellow-500 text-white font-black text-xs shadow-xs">
                         🥇 JUARA 1 UTAMA
                       </span>
@@ -5231,12 +5286,15 @@ export default function Dashboard() {
                       <div className="mt-2 text-sm font-black text-amber-900 bg-amber-200/90 px-4 py-1.5 rounded-2xl border border-amber-300">
                         Skor Tertinggi: {rankingData[0].finalScore} / 100
                       </div>
+                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-3 py-0.5 rounded-full group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                        👁️ Rincian Kegiatan
+                      </span>
                     </div>
                   )}
 
                   {/* Juara 3 (Perunggu) */}
                   {rankingData[2] && (
-                    <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-50/60 via-orange-50/30 to-white border-2 border-amber-600/40 shadow-xs flex flex-col items-center text-center relative order-3">
+                    <div onClick={() => openStudentActivitiesFromRanking(rankingData[2].student)} className="p-4 rounded-2xl bg-gradient-to-b from-amber-50/60 via-orange-50/30 to-white border-2 border-amber-600/40 shadow-xs flex flex-col items-center text-center relative order-3 cursor-pointer hover:border-amber-500 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
                       <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-amber-700 text-white font-black text-xs shadow-xs">
                         🥉 JUARA 3
                       </span>
@@ -5254,6 +5312,9 @@ export default function Dashboard() {
                       <div className="mt-2 text-xs font-black text-amber-800 bg-amber-100/80 px-3 py-1 rounded-xl">
                         Skor: {rankingData[2].finalScore} / 100
                       </div>
+                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full group-hover:bg-amber-500 group-hover:text-white transition-colors">
+                        👁️ Rincian Kegiatan
+                      </span>
                     </div>
                   )}
                 </div>
@@ -5277,24 +5338,37 @@ export default function Dashboard() {
                 </div>
 
                 {/* Tabel Peringkat Lengkap Karakter */}
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <div className="max-h-80 overflow-y-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 font-extrabold sticky top-0">
-                        <tr>
-                          <th className="px-3.5 py-2.5 text-center">Rank</th>
-                          <th className="px-3.5 py-2.5">Siswa</th>
-                          <th className="px-3.5 py-2.5">Kelas</th>
-                          <th className="px-3.5 py-2.5 text-center">7 KAIH</th>
-                          <th className="px-3.5 py-2.5 text-center">Guru ⭐</th>
-                          <th className="px-3.5 py-2.5 text-center">Presensi</th>
-                          <th className="px-3.5 py-2.5 text-center">Skor Akhir</th>
-                          <th className="px-3.5 py-2.5 text-center">Predikat</th>
-                        </tr>
-                      </thead>
+                <div className="space-y-1.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] px-1 font-bold">
+                    <span className="text-slate-700">Daftar Peringkat Karakter Siswa</span>
+                    <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-lg flex items-center gap-1">
+                      💡 Klik baris siswa atau tombol <b>👁️ Rincian</b> untuk membuka rincian kegiatan
+                    </span>
+                  </div>
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                    <div className="max-h-80 overflow-y-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 font-extrabold sticky top-0 z-10">
+                          <tr>
+                            <th className="px-3.5 py-2.5 text-center">Rank</th>
+                            <th className="px-3.5 py-2.5">Siswa</th>
+                            <th className="px-3.5 py-2.5">Kelas</th>
+                            <th className="px-3.5 py-2.5 text-center">7 KAIH</th>
+                            <th className="px-3.5 py-2.5 text-center">Guru ⭐</th>
+                            <th className="px-3.5 py-2.5 text-center">Presensi</th>
+                            <th className="px-3.5 py-2.5 text-center">Skor Akhir</th>
+                            <th className="px-3.5 py-2.5 text-center">Predikat</th>
+                            <th className="px-3.5 py-2.5 text-center">Aksi</th>
+                          </tr>
+                        </thead>
                       <tbody className="divide-y divide-slate-100 font-medium">
                         {rankingData.map((item, idx) => (
-                          <tr key={item.student.id} className="hover:bg-amber-50/40 transition-colors">
+                          <tr
+                            key={item.student.id}
+                            onClick={() => openStudentActivitiesFromRanking(item.student)}
+                            className="hover:bg-amber-100/60 transition-colors cursor-pointer group"
+                            title="Klik untuk membuka popup rincian seluruh kegiatan siswa"
+                          >
                             <td className="px-3.5 py-2.5 text-center font-black">
                               {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`}
                             </td>
@@ -5335,11 +5409,25 @@ export default function Dashboard() {
                                 {item.predicate}
                               </span>
                             </td>
+                            <td className="px-3.5 py-2.5 text-center">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openStudentActivitiesFromRanking(item.student);
+                                }}
+                                className="clay-btn-white px-2.5 py-1 text-[10px] font-bold text-amber-900 group-hover:bg-white rounded-xl inline-flex items-center gap-1 cursor-pointer shadow-2xs transition-all"
+                                title="Buka popup rincian kegiatan siswa"
+                              >
+                                👁️ Rincian
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+                </div>
                 </div>
               </div>
             )}
@@ -5362,7 +5450,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                   {/* Juara 2 Kedisiplinan */}
                   {disciplineRankingData[1] && (
-                    <div className="p-4 rounded-2xl bg-gradient-to-b from-teal-50 via-slate-50 to-white border-2 border-teal-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1">
+                    <div onClick={() => openStudentActivitiesFromRanking(disciplineRankingData[1].student)} className="p-4 rounded-2xl bg-gradient-to-b from-teal-50 via-slate-50 to-white border-2 border-teal-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1 cursor-pointer hover:border-teal-500 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
                       <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-teal-600 text-white font-black text-xs shadow-xs">
                         🥈 JUARA 2 DISIPLIN
                       </span>
@@ -5380,12 +5468,15 @@ export default function Dashboard() {
                       <div className="mt-2 text-xs font-black text-teal-900 bg-teal-100/90 px-3 py-1 rounded-xl">
                         Skor Disiplin: {disciplineRankingData[1].finalScore} / 100
                       </div>
+                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2.5 py-0.5 rounded-full group-hover:bg-teal-600 group-hover:text-white transition-colors">
+                        👁️ Rincian Kegiatan
+                      </span>
                     </div>
                   )}
 
                   {/* Juara 1 Kedisiplinan */}
                   {disciplineRankingData[0] && (
-                    <div className="p-5 rounded-2xl bg-gradient-to-b from-emerald-100 via-emerald-50 to-white border-2 border-emerald-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105">
+                    <div onClick={() => openStudentActivitiesFromRanking(disciplineRankingData[0].student)} className="p-5 rounded-2xl bg-gradient-to-b from-emerald-100 via-emerald-50 to-white border-2 border-emerald-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105 cursor-pointer hover:ring-8 hover:ring-emerald-200/60 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
                       <span className="absolute -top-3.5 px-3.5 py-1 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs shadow-xs">
                         🥇 TELADAN UTAMA DISIPLIN
                       </span>
@@ -5403,12 +5494,15 @@ export default function Dashboard() {
                       <div className="mt-2 text-sm font-black text-emerald-900 bg-emerald-200/90 px-4 py-1.5 rounded-2xl border border-emerald-300">
                         Skor Disiplin: {disciplineRankingData[0].finalScore} / 100
                       </div>
+                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-900 bg-emerald-100 border border-emerald-300 px-3 py-0.5 rounded-full group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                        👁️ Rincian Kegiatan
+                      </span>
                     </div>
                   )}
 
                   {/* Juara 3 Kedisiplinan */}
                   {disciplineRankingData[2] && (
-                    <div className="p-4 rounded-2xl bg-gradient-to-b from-cyan-50/70 via-slate-50 to-white border-2 border-cyan-400 shadow-xs flex flex-col items-center text-center relative order-3">
+                    <div onClick={() => openStudentActivitiesFromRanking(disciplineRankingData[2].student)} className="p-4 rounded-2xl bg-gradient-to-b from-cyan-50/70 via-slate-50 to-white border-2 border-cyan-400 shadow-xs flex flex-col items-center text-center relative order-3 cursor-pointer hover:border-cyan-600 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
                       <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-cyan-700 text-white font-black text-xs shadow-xs">
                         🥉 JUARA 3 DISIPLIN
                       </span>
@@ -5426,6 +5520,9 @@ export default function Dashboard() {
                       <div className="mt-2 text-xs font-black text-cyan-900 bg-cyan-100/90 px-3 py-1 rounded-xl">
                         Skor Disiplin: {disciplineRankingData[2].finalScore} / 100
                       </div>
+                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-cyan-800 bg-cyan-50 border border-cyan-200 px-2.5 py-0.5 rounded-full group-hover:bg-cyan-600 group-hover:text-white transition-colors">
+                        👁️ Rincian Kegiatan
+                      </span>
                     </div>
                   )}
                 </div>
@@ -5449,25 +5546,38 @@ export default function Dashboard() {
                 </div>
 
                 {/* Tabel Peringkat Kedisiplinan */}
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <div className="max-h-80 overflow-y-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-emerald-50/80 border-b border-emerald-200 text-emerald-950 font-extrabold sticky top-0">
-                        <tr>
-                          <th className="px-3.5 py-2.5 text-center">Rank</th>
-                          <th className="px-3.5 py-2.5">Siswa</th>
-                          <th className="px-3.5 py-2.5">Kelas</th>
-                          <th className="px-3.5 py-2.5 text-center">Kegiatan Terjadwal</th>
-                          <th className="px-3.5 py-2.5 text-center">Rata-rata Δt</th>
-                          <th className="px-3.5 py-2.5 text-center">Tepat Waktu</th>
-                          <th className="px-3.5 py-2.5 text-center">Presensi</th>
-                          <th className="px-3.5 py-2.5 text-center">Skor Disiplin</th>
-                          <th className="px-3.5 py-2.5 text-center">Predikat</th>
-                        </tr>
-                      </thead>
+                <div className="space-y-1.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] px-1 font-bold">
+                    <span className="text-slate-700">Daftar Peringkat Kedisiplinan Waktu Siswa</span>
+                    <span className="text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg flex items-center gap-1">
+                      💡 Klik baris siswa atau tombol <b>👁️ Rincian</b> untuk membuka rincian kegiatan
+                    </span>
+                  </div>
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                    <div className="max-h-80 overflow-y-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-emerald-50/80 border-b border-emerald-200 text-emerald-950 font-extrabold sticky top-0 z-10">
+                          <tr>
+                            <th className="px-3.5 py-2.5 text-center">Rank</th>
+                            <th className="px-3.5 py-2.5">Siswa</th>
+                            <th className="px-3.5 py-2.5">Kelas</th>
+                            <th className="px-3.5 py-2.5 text-center">Kegiatan Terjadwal</th>
+                            <th className="px-3.5 py-2.5 text-center">Rata-rata Δt</th>
+                            <th className="px-3.5 py-2.5 text-center">Tepat Waktu</th>
+                            <th className="px-3.5 py-2.5 text-center">Presensi</th>
+                            <th className="px-3.5 py-2.5 text-center">Skor Disiplin</th>
+                            <th className="px-3.5 py-2.5 text-center">Predikat</th>
+                            <th className="px-3.5 py-2.5 text-center">Aksi</th>
+                          </tr>
+                        </thead>
                       <tbody className="divide-y divide-slate-100 font-medium">
                         {disciplineRankingData.map((item, idx) => (
-                          <tr key={item.student.id} className="hover:bg-emerald-50/30 transition-colors">
+                          <tr
+                            key={item.student.id}
+                            onClick={() => openStudentActivitiesFromRanking(item.student)}
+                            className="hover:bg-emerald-100/60 transition-colors cursor-pointer group"
+                            title="Klik untuk membuka popup rincian seluruh kegiatan siswa"
+                          >
                             <td className="px-3.5 py-2.5 text-center font-black">
                               {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`}
                             </td>
@@ -5511,11 +5621,25 @@ export default function Dashboard() {
                                 {item.predicate}
                               </span>
                             </td>
+                            <td className="px-3.5 py-2.5 text-center">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openStudentActivitiesFromRanking(item.student);
+                                }}
+                                className="clay-btn-white px-2.5 py-1 text-[10px] font-bold text-emerald-800 group-hover:bg-white rounded-xl inline-flex items-center gap-1 cursor-pointer shadow-2xs transition-all"
+                                title="Buka popup rincian kegiatan siswa"
+                              >
+                                👁️ Rincian
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+                </div>
                 </div>
               </div>
             )}
@@ -5538,7 +5662,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                   {/* Juara 2 Kuis */}
                   {quizRankingData[1] && (
-                    <div className="p-4 rounded-2xl bg-gradient-to-b from-indigo-50 via-slate-50 to-white border-2 border-indigo-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1">
+                    <div onClick={() => openStudentActivitiesFromRanking(quizRankingData[1].student)} className="p-4 rounded-2xl bg-gradient-to-b from-indigo-50 via-slate-50 to-white border-2 border-indigo-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1 cursor-pointer hover:border-indigo-500 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
                       <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-indigo-500 text-white font-black text-xs shadow-xs">
                         🥈 JUARA 2 KUIS
                       </span>
@@ -5556,12 +5680,15 @@ export default function Dashboard() {
                       <div className="mt-2 text-xs font-black text-indigo-900 bg-indigo-100/90 px-3 py-1 rounded-xl">
                         {quizRankingData[1].totalScore.toLocaleString('id-ID')} Poin
                       </div>
+                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-indigo-800 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                        👁️ Rincian Kegiatan
+                      </span>
                     </div>
                   )}
 
                   {/* Juara 1 Kuis */}
                   {quizRankingData[0] && (
-                    <div className="p-5 rounded-2xl bg-gradient-to-b from-purple-100 via-indigo-50 to-white border-2 border-indigo-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105">
+                    <div onClick={() => openStudentActivitiesFromRanking(quizRankingData[0].student)} className="p-5 rounded-2xl bg-gradient-to-b from-purple-100 via-indigo-50 to-white border-2 border-indigo-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105 cursor-pointer hover:ring-8 hover:ring-indigo-200/60 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
                       <span className="absolute -top-3.5 px-3.5 py-1 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black text-xs shadow-xs">
                         🥇 JUARA UTAMA KUIS
                       </span>
@@ -5579,12 +5706,15 @@ export default function Dashboard() {
                       <div className="mt-2 text-sm font-black text-indigo-950 bg-indigo-200/90 px-4 py-1.5 rounded-2xl border border-indigo-300">
                         {quizRankingData[0].totalScore.toLocaleString('id-ID')} Total Poin
                       </div>
+                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-indigo-900 bg-indigo-100 border border-indigo-300 px-3 py-0.5 rounded-full group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                        👁️ Rincian Kegiatan
+                      </span>
                     </div>
                   )}
 
                   {/* Juara 3 Kuis */}
                   {quizRankingData[2] && (
-                    <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-100 via-indigo-50/20 to-white border-2 border-indigo-200 shadow-xs flex flex-col items-center text-center relative order-3">
+                    <div onClick={() => openStudentActivitiesFromRanking(quizRankingData[2].student)} className="p-4 rounded-2xl bg-gradient-to-b from-slate-100 via-indigo-50/20 to-white border-2 border-indigo-200 shadow-xs flex flex-col items-center text-center relative order-3 cursor-pointer hover:border-indigo-400 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
                       <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-slate-600 text-white font-black text-xs shadow-xs">
                         🥉 JUARA 3 KUIS
                       </span>
@@ -5602,6 +5732,9 @@ export default function Dashboard() {
                       <div className="mt-2 text-xs font-black text-indigo-900 bg-indigo-100/90 px-3 py-1 rounded-xl">
                         {quizRankingData[2].totalScore.toLocaleString('id-ID')} Poin
                       </div>
+                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-indigo-800 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                        👁️ Rincian Kegiatan
+                      </span>
                     </div>
                   )}
                 </div>
@@ -5625,25 +5758,38 @@ export default function Dashboard() {
                 </div>
 
                 {/* Tabel Peringkat Kuis Lengkap */}
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <div className="max-h-80 overflow-y-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-indigo-50/80 border-b border-indigo-200 text-indigo-950 font-extrabold sticky top-0">
-                        <tr>
-                          <th className="px-3.5 py-2.5 text-center">Rank</th>
-                          <th className="px-3.5 py-2.5">Siswa</th>
-                          <th className="px-3.5 py-2.5">Kelas</th>
-                          <th className="px-3.5 py-2.5 text-center">Total Poin</th>
-                          <th className="px-3.5 py-2.5 text-center">Kuis Diikuti</th>
-                          <th className="px-3.5 py-2.5 text-center">Benar / Soal</th>
-                          <th className="px-3.5 py-2.5 text-center">Akurasi</th>
-                          <th className="px-3.5 py-2.5 text-center">Best Score</th>
-                          <th className="px-3.5 py-2.5 text-center">Predikat</th>
-                        </tr>
-                      </thead>
+                <div className="space-y-1.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] px-1 font-bold">
+                    <span className="text-slate-700">Daftar Peringkat Kuis Edukasi Siswa</span>
+                    <span className="text-indigo-800 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-lg flex items-center gap-1">
+                      💡 Klik baris siswa atau tombol <b>👁️ Rincian</b> untuk membuka rincian kegiatan
+                    </span>
+                  </div>
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                    <div className="max-h-80 overflow-y-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-indigo-50/80 border-b border-indigo-200 text-indigo-950 font-extrabold sticky top-0 z-10">
+                          <tr>
+                            <th className="px-3.5 py-2.5 text-center">Rank</th>
+                            <th className="px-3.5 py-2.5">Siswa</th>
+                            <th className="px-3.5 py-2.5">Kelas</th>
+                            <th className="px-3.5 py-2.5 text-center">Total Poin</th>
+                            <th className="px-3.5 py-2.5 text-center">Kuis Diikuti</th>
+                            <th className="px-3.5 py-2.5 text-center">Benar / Soal</th>
+                            <th className="px-3.5 py-2.5 text-center">Akurasi</th>
+                            <th className="px-3.5 py-2.5 text-center">Best Score</th>
+                            <th className="px-3.5 py-2.5 text-center">Predikat</th>
+                            <th className="px-3.5 py-2.5 text-center">Aksi</th>
+                          </tr>
+                        </thead>
                       <tbody className="divide-y divide-slate-100 font-medium">
                         {quizRankingData.map((item, idx) => (
-                          <tr key={item.student.id} className="hover:bg-indigo-50/30 transition-colors">
+                          <tr
+                            key={item.student.id}
+                            onClick={() => openStudentActivitiesFromRanking(item.student)}
+                            className="hover:bg-indigo-100/60 transition-colors cursor-pointer group"
+                            title="Klik untuk membuka popup rincian seluruh kegiatan siswa"
+                          >
                             <td className="px-3.5 py-2.5 text-center font-black">
                               {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`}
                             </td>
@@ -5683,11 +5829,25 @@ export default function Dashboard() {
                                 {item.predicate}
                               </span>
                             </td>
+                            <td className="px-3.5 py-2.5 text-center">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openStudentActivitiesFromRanking(item.student);
+                                }}
+                                className="clay-btn-white px-2.5 py-1 text-[10px] font-bold text-indigo-800 group-hover:bg-white rounded-xl inline-flex items-center gap-1 cursor-pointer shadow-2xs transition-all"
+                                title="Buka popup rincian kegiatan siswa"
+                              >
+                                👁️ Rincian
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+                </div>
                 </div>
               </div>
             )}
@@ -5697,7 +5857,7 @@ export default function Dashboard() {
 
       {/* ================= MODAL IMAGE ZOOM ================= */}
       {zoomedImage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm">
           <div className="absolute inset-0" onClick={() => setZoomedImage(null)}></div>
           <div className="relative max-w-3xl max-h-[90vh] overflow-hidden rounded-2xl z-10 shadow-2xl">
             <button
