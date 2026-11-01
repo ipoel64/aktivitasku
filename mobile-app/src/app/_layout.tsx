@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Stack, router } from 'expo-router';
 import { View, Text, TouchableOpacity, Platform } from 'react-native';
 import { configureReminderNotificationHandler, listenReminderTaps } from '../utils/kaihReminders';
+import LiveCenter from '../components/LiveCenter';
 
 if (Platform.OS === 'web' && typeof window !== 'undefined') {
   window.addEventListener('unhandledrejection', (event) => {
@@ -56,17 +57,21 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: '#0f1413' },
-      }}
-    >
-      <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="login" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="biodata" options={{ headerShown: false }} />
-      <Stack.Screen name="input" options={{ headerShown: false }} />
-    </Stack>
+    <>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: '#0f1413' },
+        }}
+      >
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="biodata" options={{ headerShown: false }} />
+        <Stack.Screen name="input" options={{ headerShown: false }} />
+      </Stack>
+      {/* Pop-up pesan/notifikasi guru & Kuis Live realtime */}
+      <LiveCenter />
+    </>
   );
 }

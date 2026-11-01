@@ -6,7 +6,7 @@ import {
   BarChart2, UserCheck, Save, XCircle, HeartPulse, FileText, 
   Sparkles, ZoomIn, RotateCcw, Phone, User, 
   Award, School, Home, Briefcase, GraduationCap, Camera, KeyRound, LayoutDashboard, Settings,
-  Printer
+  Printer, MessageCircle, Gamepad2
 } from 'lucide-react';
 import {
   loadSchoolLocationConfig,
@@ -17,6 +17,8 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import KaihLoadingScreen from '../components/KaihLoadingScreen';
+import MapChatDrawer from '../components/MapChatDrawer';
+import QuizStudio from '../components/QuizStudio';
 
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
@@ -198,6 +200,28 @@ const parseAndDeduplicateWebActivities = (rawList: any[]) => {
   });
 };
 
+// Pecah isian bebas (hobi/bakat/dll) menjadi token ternormalisasi untuk grafik & filter
+const splitTokens = (raw: any): string[] => {
+  if (!raw || raw === '-') return [];
+  return Array.from(new Set(
+    String(raw)
+      .split(/[,;/\n]+|\s+dan\s+/i)
+      .map(t => t.trim().toLowerCase())
+      .filter(t => t && t !== '-')
+      .map(t => t.charAt(0).toUpperCase() + t.slice(1))
+  ));
+};
+
+const getStudentFieldValues = (s: any, key: string): string[] => {
+  if (key === 'parentOccupation') {
+    const v = s.parentNotes?.occupation;
+    return v && v !== '-' ? [String(v).trim()] : [];
+  }
+  if (['talents', 'interests', 'hobbies', 'extracurriculars', 'aspiration'].includes(key)) return splitTokens(s[key]);
+  const v = s[key];
+  return v && v !== '-' ? [String(v).trim()] : [];
+};
+
 // Map Fly-To Helper Component
 function FlyToLocation({ targetLoc }: { targetLoc: { lat: number; lng: number } | null }) {
   const map = useMap();
@@ -211,16 +235,121 @@ function FlyToLocation({ targetLoc }: { targetLoc: { lat: number; lng: number } 
   return null;
 }
 
+const KAIH_MEANINGS: { key: string; icon: string; meaning: string; indicator: string; advice: { high: string[]; mid: string[]; low: string[] } }[] = [
+  { key: 'bangun', icon: '🌅', meaning: 'Melatih kemandirian, kesiapan mental, dan manajemen waktu sejak awal hari.', indicator: 'Ketepatan jam bangun terhadap rencana & kesiapan berangkat sekolah.',
+    advice: { high: ['Pertahankan disiplin bangun pagimu, ini kunci sukses belajarmu!'], mid: ['Bangun pagimu sudah baik, coba majukan 10-15 menit agar lebih santai.'], low: ['Pasang alarm dan siapkan perlengkapan sekolah malam hari agar mudah bangun pagi.'] } },
+  { key: 'ibadah', icon: '🕌', meaning: 'Membangun pondasi spiritual, ketenangan batin, akhlak mulia, dan rasa syukur.', indicator: 'Konsistensi pelaksanaan ibadah tepat pada waktunya.',
+    advice: { high: ['Ibadahmu sangat konsisten, teruslah menjadi teladan bagi teman-temanmu.'], mid: ['Ibadahmu sudah baik, usahakan selalu tepat waktu di awal waktu.'], low: ['Ayo perbaiki ketepatan ibadahmu, mulai dari satu waktu yang paling mudah dijaga.'] } },
+  { key: 'olahraga', icon: '🏃', meaning: 'Menjaga kebugaran fisik, ketahanan tubuh, dan fokus belajar di kelas.', indicator: 'Durasi, keteraturan aktivitas fisik, dan semangat menjaga kesehatan.',
+    advice: { high: ['Semangat olahragamu luar biasa, jaga keteraturannya!'], mid: ['Tambah durasi olahragamu secara bertahap menjadi 30 menit.'], low: ['Mulai dengan peregangan ringan setiap pagi, lalu tingkatkan perlahan.'] } },
+  { key: 'makan', icon: '🥗', meaning: 'Memenuhi nutrisi otak dan tubuh untuk pertumbuhan optimal serta mencegah penyakit.', indicator: 'Komposisi makanan sehat & sarapan sebelum belajar.',
+    advice: { high: ['Pola makanmu sudah sehat dan bergizi, pertahankan ya!'], mid: ['Tambahkan sayur dan buah pada menu hariannya.'], low: ['Kurangi jajanan manis/gorengan, biasakan sarapan bergizi sebelum berangkat.'] } },
+  { key: 'belajar', icon: '📚', meaning: 'Menumbuhkan rasa ingin tahu, literasi, daya kritis, dan ketekunan akademik.', indicator: 'Kemandirian mengulang pelajaran, membaca, dan mengerjakan tugas.',
+    advice: { high: ['Semangat belajarmu hebat, tantang dirimu dengan bacaan baru.'], mid: ['Buat jadwal belajar rutin 30-45 menit setiap hari.'], low: ['Mulai dari 15 menit belajar mandiri tiap hari, lalu naikkan perlahan.'] } },
+  { key: 'masyarakat', icon: '🤝', meaning: 'Mengasah empati, gotong royong, kesantunan, dan kepedulian lingkungan.', indicator: 'Keterlibatan membantu orang tua, kerja bakti, dan interaksi sosial positif.',
+    advice: { high: ['Kepedulianmu terhadap lingkungan sangat baik, teruskan kebaikan itu!'], mid: ['Cari satu kegiatan sosial rutin di sekitar rumahmu.'], low: ['Mulai dari hal kecil: bantu pekerjaan rumah dan sapa tetangga dengan santun.'] } },
+  { key: 'tidur', icon: '🌙', meaning: 'Memulihkan energi fisik dan memori otak agar bangun pagi dengan segar.', indicator: 'Disiplin mematikan gawai dan tidur tidak larut malam (≤ 22.00).',
+    advice: { high: ['Jam tidurmu sangat teratur, ini mendukung konsentrasi belajar.'], mid: ['Usahakan tidur sedikit lebih awal agar bangun lebih segar.'], low: ['Matikan gawai 1 jam sebelum tidur dan usahakan tidur sebelum pukul 22.00.'] } },
+];
+
+const getKaihMeaning = (name: string) => {
+  const n = (name || '').toLowerCase();
+  if (n.includes('bangun')) return KAIH_MEANINGS[0];
+  if (n.includes('ibadah')) return KAIH_MEANINGS[1];
+  if (n.includes('olahraga')) return KAIH_MEANINGS[2];
+  if (n.includes('makan')) return KAIH_MEANINGS[3];
+  if (n.includes('belajar')) return KAIH_MEANINGS[4];
+  if (n.includes('masyarakat')) return KAIH_MEANINGS[5];
+  if (n.includes('tidur')) return KAIH_MEANINGS[6];
+  return null;
+};
+
+const toMinutes = (t?: string | null) => {
+  if (!t || !/^\d{2}:\d{2}/.test(t)) return null;
+  return parseInt(t.slice(0, 2), 10) * 60 + parseInt(t.slice(3, 5), 10);
+};
+
+// Analisa ketepatan waktu: selisih jam rencana vs jam realisasi
+const getDisciplineInfo = (act: any) => {
+  const plan = toMinutes(act?.plannedTime);
+  const real = toMinutes(act?.realizedTime);
+  if (plan === null || real === null) return { delta: null as number | null, score: null as number | null, level: 'unknown' as const, label: 'Jam rencana belum tercatat' };
+  const delta = real - plan;
+  const late = Math.max(delta, 0);
+  if (late <= 15) return { delta, score: 100, level: 'high' as const, label: 'Sangat Disiplin' };
+  if (late <= 45) return { delta, score: 85, level: 'mid' as const, label: 'Cukup Disiplin' };
+  return { delta, score: 60, level: 'low' as const, label: 'Perlu Pembinaan' };
+};
+
+const RINCIAN_REGEX = /\n?\[Rincian\][^\n]*/;
+
+const DEMO_COLORS = ['#10b981', '#6366f1', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7', '#14b8a6', '#f97316', '#ec4899', '#84cc16'];
+
+const buildDistribution = (students: any[], key: string, limit = 8) => {
+  const map: Record<string, number> = {};
+  students.forEach(s => {
+    const vals = getStudentFieldValues(s, key);
+    if (vals.length === 0) map['Belum diisi'] = (map['Belum diisi'] || 0) + 1;
+    vals.forEach(v => { map[v] = (map[v] || 0) + 1; });
+  });
+  const entries = Object.entries(map).sort((a, b) => b[1] - a[1]);
+  return entries.slice(0, limit).map(([name, value]) => ({ name, value }));
+};
+
+function DemoChartCard({ title, icon, data, type, filterKey, onPick }: {
+  title: string; icon: string; data: { name: string; value: number }[]; type: 'pie' | 'bar'; filterKey: string; onPick: (key: string, value: string) => void;
+}) {
+  const total = data.reduce((a, b) => a + b.value, 0);
+  const pick = (name: string) => { if (name && name !== 'Belum diisi') onPick(filterKey, name); };
+  return (
+    <div className="clay-box p-4 space-y-2">
+      <h3 className="font-bold text-slate-900 text-sm flex items-center justify-between gap-1.5">
+        <span>{icon} {title}</span>
+        <span className="text-[9px] font-semibold text-slate-400">Klik grafik → Data Siswa</span>
+      </h3>
+      {data.length === 0 || total === 0 ? (
+        <p className="text-xs text-slate-400 text-center py-8">Belum ada data.</p>
+      ) : (
+        <div className="h-52">
+          <ResponsiveContainer width="100%" height="100%">
+            {type === 'pie' ? (
+              <PieChart>
+                <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={42} outerRadius={72} paddingAngle={2}
+                  onClick={(d: any) => pick(d?.name)} style={{ cursor: 'pointer' }}
+                  label={(e: any) => `${e.value}`}>
+                  {data.map((_, i) => <Cell key={i} fill={DEMO_COLORS[i % DEMO_COLORS.length]} />)}
+                </Pie>
+                <Tooltip formatter={(v: any, n: any) => [`${v} siswa (${Math.round((Number(v) / total) * 100)}%)`, n]} />
+                <Legend iconType="circle" iconSize={9} wrapperStyle={{ fontSize: '10px' }} />
+              </PieChart>
+            ) : (
+              <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} />
+                <YAxis dataKey="name" type="category" width={90} tick={{ fontSize: 10 }} />
+                <Tooltip cursor={{ fill: 'rgba(0,0,0,0.04)' }} formatter={(v: any) => [`${v} siswa`, 'Jumlah']} />
+                <Bar dataKey="value" radius={[0, 6, 6, 0]} style={{ cursor: 'pointer' }} onClick={(d: any) => pick(d?.name)}>
+                  {data.map((_, i) => <Cell key={i} fill={DEMO_COLORS[i % DEMO_COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
-  const [activeTab, setActiveTabState] = useState<'dashboard' | 'feed' | 'attendance' | 'students' | 'map' | 'profile'>(() => {
+  const [activeTab, setActiveTabState] = useState<'dashboard' | 'feed' | 'attendance' | 'students' | 'map' | 'quiz' | 'profile'>(() => {
     const saved = sessionStorage.getItem('BUDI_UTOMO_ACTIVE_TAB');
-    if (saved && ['dashboard', 'feed', 'attendance', 'students', 'map', 'profile'].includes(saved)) {
+    if (saved && ['dashboard', 'feed', 'attendance', 'students', 'map', 'quiz', 'profile'].includes(saved)) {
       return saved as any;
     }
     return 'dashboard';
   });
 
-  const setActiveTab = (tab: 'dashboard' | 'feed' | 'attendance' | 'students' | 'map' | 'profile') => {
+  const setActiveTab = (tab: 'dashboard' | 'feed' | 'attendance' | 'students' | 'map' | 'quiz' | 'profile') => {
     sessionStorage.setItem('BUDI_UTOMO_ACTIVE_TAB', tab);
     setActiveTabState(tab);
   };
@@ -270,6 +399,16 @@ export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<any>(null);
   const [evaluation, setEvaluation] = useState({ rating: 0, comment: '' });
+  const [evalAspects, setEvalAspects] = useState({ waktu: 0, kualitas: 0, konsistensi: 0 });
+  const updateAspect = (key: 'waktu' | 'kualitas' | 'konsistensi', val: number) => {
+    const next = { ...evalAspects, [key]: val };
+    setEvalAspects(next);
+    const filled = Object.values(next).filter(v => v > 0);
+    const avg = filled.length ? Math.round(filled.reduce((a, b) => a + b, 0) / filled.length) : 0;
+    setEvaluation(prev => ({ ...prev, rating: avg }));
+  };
+  const appendAdvice = (text: string) =>
+    setEvaluation(prev => ({ ...prev, comment: prev.comment.trim() ? `${prev.comment.trim()} ${text}` : text }));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Profile Modal (Analytics)
@@ -304,10 +443,18 @@ export default function Dashboard() {
 
   // Data Siswa: pencarian & filter berdasarkan biodata
   const [stuSearch, setStuSearch] = useState('');
-  const [stuFilters, setStuFilters] = useState({ jenjang: 'Semua', kelas: 'Semua', jurusan: 'Semua', gender: 'Semua', religion: 'Semua', suku: 'Semua', status: 'Semua' });
+  const [chatTarget, setChatTarget] = useState<{ student: any; locationName?: string } | null>(null);
+  const [demoExtraTab, setDemoExtraTab] = useState<'suku' | 'blood_type' | 'parentOccupation'>('suku');
+  const EMPTY_STU_FILTERS = { jenjang: 'Semua', kelas: 'Semua', jurusan: 'Semua', gender: 'Semua', religion: 'Semua', suku: 'Semua', status: 'Semua', talents: 'Semua', interests: 'Semua', hobbies: 'Semua', extracurriculars: 'Semua', aspiration: 'Semua', blood_type: 'Semua', parentOccupation: 'Semua' };
+  const [stuFilters, setStuFilters] = useState({ ...EMPTY_STU_FILTERS });
   const resetStuFilters = () => {
     setStuSearch('');
-    setStuFilters({ jenjang: 'Semua', kelas: 'Semua', jurusan: 'Semua', gender: 'Semua', religion: 'Semua', suku: 'Semua', status: 'Semua' });
+    setStuFilters({ ...EMPTY_STU_FILTERS });
+  };
+  const navigateToStudentsWithFilter = (key: string, value: string) => {
+    setStuSearch('');
+    setStuFilters({ ...EMPTY_STU_FILTERS, [key]: value });
+    setActiveTab('students');
   };
 
   const getCurrentTimeStr = () => {
@@ -841,9 +988,14 @@ export default function Dashboard() {
     }
     setSelectedActivity(activity);
     const existing = activity.evaluations && activity.evaluations.length > 0 ? activity.evaluations[0] : null;
+    const rawComment: string = existing?.comment || '';
+    const rincian = rawComment.match(/\[Rincian\]\s*Waktu (\d)\/5 · Kualitas (\d)\/5 · Konsistensi (\d)\/5/);
+    setEvalAspects(rincian
+      ? { waktu: +rincian[1], kualitas: +rincian[2], konsistensi: +rincian[3] }
+      : { waktu: existing?.rating || 0, kualitas: existing?.rating || 0, konsistensi: existing?.rating || 0 });
     setEvaluation({
       rating: existing?.rating || 0,
-      comment: existing?.comment || ''
+      comment: rawComment.replace(RINCIAN_REGEX, '').trim()
     });
     setIsModalOpen(true);
   };
@@ -883,6 +1035,7 @@ export default function Dashboard() {
       return;
     }
 
+    const finalComment = `${evaluation.comment.trim()}\n[Rincian] Waktu ${evalAspects.waktu}/5 · Kualitas ${evalAspects.kualitas}/5 · Konsistensi ${evalAspects.konsistensi}/5`.trim();
     setIsSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -905,7 +1058,7 @@ export default function Dashboard() {
       if (existingEvalId) {
         const { error } = await supabase.from('evaluations').update({
           rating: evaluation.rating,
-          comment: evaluation.comment
+          comment: finalComment
         }).eq('id', existingEvalId);
         evalErr = error;
       } else {
@@ -913,7 +1066,7 @@ export default function Dashboard() {
           activity_id: selectedActivity.id,
           teacher_id: teacherId,
           rating: evaluation.rating,
-          comment: evaluation.comment
+          comment: finalComment
         });
         evalErr = error;
       }
@@ -930,7 +1083,7 @@ export default function Dashboard() {
             if (a.id === selectedActivity.id) {
               return {
                 ...a,
-                evaluations: [{ id: existingEvalId || 'new', rating: evaluation.rating, comment: evaluation.comment }]
+                evaluations: [{ id: existingEvalId || 'new', rating: evaluation.rating, comment: finalComment }]
               };
             }
             return a;
@@ -1465,13 +1618,22 @@ export default function Dashboard() {
   const stuOptions = useMemo(() => {
     const uniq = (key: string) =>
       Array.from(new Set(students.map((s: any) => s[key]).filter((v: any) => v && v !== '-'))).sort() as string[];
+    const tok = (key: string) =>
+      Array.from(new Set(students.flatMap((s: any) => getStudentFieldValues(s, key)))).sort() as string[];
     return {
       jenjang: uniq('jenjang'),
       kelas: uniq('kelas'),
       jurusan: uniq('jurusan'),
       gender: uniq('gender'),
       religion: uniq('religion'),
-      suku: uniq('suku')
+      suku: uniq('suku'),
+      talents: tok('talents'),
+      interests: tok('interests'),
+      hobbies: tok('hobbies'),
+      extracurriculars: tok('extracurriculars'),
+      aspiration: tok('aspiration'),
+      blood_type: uniq('blood_type'),
+      parentOccupation: tok('parentOccupation')
     };
   }, [students]);
 
@@ -1490,6 +1652,9 @@ export default function Dashboard() {
       if (f.gender !== 'Semua' && s.gender !== f.gender) return false;
       if (f.religion !== 'Semua' && s.religion !== f.religion) return false;
       if (f.suku !== 'Semua' && s.suku !== f.suku) return false;
+      for (const k of ['talents', 'interests', 'hobbies', 'extracurriculars', 'aspiration', 'blood_type', 'parentOccupation'] as const) {
+        if (f[k] !== 'Semua' && !getStudentFieldValues(s, k).includes(f[k])) return false;
+      }
       if (f.status !== 'Semua') {
         const acts = activities.filter(a => a.students?.id === s.id);
         const realized = acts.filter(a => a.kaihStatus === 'REALISASI');
@@ -2081,24 +2246,6 @@ export default function Dashboard() {
                   </span>
                 </div>
               )}
-              {currentUserRole === 'guru' && (
-                <div className="mt-1.5 flex flex-wrap justify-center gap-1">
-                  {teacherAssignedClasses.length === 0 || teacherAssignedClasses.includes('SEMUA_KELAS') ? (
-                    <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
-                      Kelas Ajar: Semua Kelas
-                    </span>
-                  ) : (
-                    teacherAssignedClasses.map((cls) => (
-                      <span
-                        key={cls}
-                        className="text-[9px] font-extrabold bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full border border-teal-200"
-                      >
-                        {cls}
-                      </span>
-                    ))
-                  )}
-                </div>
-              )}
               {currentUserRole === 'admin' && (
                 <a
                   href="/admin"
@@ -2193,6 +2340,20 @@ export default function Dashboard() {
               </button>
 
               <button
+                onClick={() => setActiveTab('quiz')}
+                className={`w-full flex items-center px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all text-left cursor-pointer ${
+                  activeTab === 'quiz'
+                    ? 'clay-pill-active text-slate-900'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                <div className={`p-1.5 rounded-xl mr-2.5 ${activeTab === 'quiz' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200/60 text-slate-600'}`}>
+                  <Gamepad2 size={15} />
+                </div>
+                <span className="flex-1">Kuis Edukasi</span>
+              </button>
+
+              <button
                 onClick={() => setActiveTab('profile')}
                 className={`w-full flex items-center px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all text-left cursor-pointer ${
                   activeTab === 'profile'
@@ -2233,6 +2394,7 @@ export default function Dashboard() {
                 : activeTab === 'attendance' ? 'Absensi Siswa'
                 : activeTab === 'students' ? 'Data Siswa'
                 : activeTab === 'map' ? 'Peta Sebaran'
+                : activeTab === 'quiz' ? 'Kuis Edukasi'
                 : 'Profil Saya'}
             </h1>
             <span className={`font-black text-[10px] px-2.5 py-0.5 rounded-full border shadow-2xs uppercase tracking-wide ${
@@ -2342,6 +2504,12 @@ export default function Dashboard() {
               Peta ({studentLatestLocations.length})
             </button>
             <button
+              onClick={() => setActiveTab('quiz')}
+              className={`px-3 py-1.5 rounded-xl font-bold text-xs shrink-0 ${activeTab === 'quiz' ? 'clay-btn-coral' : 'clay-btn-white'}`}
+            >
+              Kuis
+            </button>
+            <button
               onClick={() => setActiveTab('profile')}
               className={`px-3 py-1.5 rounded-xl font-bold text-xs shrink-0 ${activeTab === 'profile' ? 'clay-btn-coral' : 'clay-btn-white'}`}
             >
@@ -2414,61 +2582,6 @@ export default function Dashboard() {
 
           return (
             <section className="space-y-4">
-              {/* Hero Welcome Banner */}
-              <div className="clay-banner-peach p-4 sm:p-5 flex flex-col md:flex-row justify-between items-center gap-4 relative overflow-hidden">
-                <div className="space-y-2 min-w-0 flex-1 text-center md:text-left">
-                  <div className="inline-flex items-center gap-1.5 bg-white/90 backdrop-blur-xs text-orange-950 px-2.5 py-0.5 rounded-full text-[10px] font-bold border border-orange-200 shadow-2xs">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Semester Genap • Tahun Ajaran Aktif 2026/2027
-                  </div>
-                  <h2 className="text-lg sm:text-xl font-black text-slate-900 leading-tight">
-                    {isReadOnly ? 'Selamat Datang' : 'Selamat Mengajar'}, {teacherProfile?.full_name || (isKepsek ? 'Kepala Sekolah' : isYayasan ? 'Pengurus Yayasan' : 'Bapak/Ibu Guru')}! ☀️
-                  </h2>
-                  <p className="text-[11px] md:text-[clamp(9px,0.95vw,12px)] md:whitespace-nowrap text-slate-700 leading-relaxed font-medium">
-                    {isReadOnly
-                      ? 'Pantau rekapitulasi rencana & realisasi 7 KAIH siswa, tinjau absensi harian kelas, serta pantau statistik perkembangan karakter secara realtime (Mode Pemantauan).'
-                      : 'Pantau rencana & realisasi 7 KAIH siswa, kelola absensi harian, dan berikan penilaian evaluasi kegiatan dengan lebih hangat dan menyenangkan hari ini.'}
-                  </p>
-                  <div className="flex flex-wrap gap-2 pt-1 justify-center md:justify-start">
-                    <button
-                      onClick={() => setActiveTab('feed')}
-                      className="clay-btn-coral px-3.5 py-1.5 font-bold text-xs rounded-2xl flex items-center cursor-pointer"
-                    >
-                      <ActivityIcon size={13} className="mr-1.5" /> Aktivitas Siswa
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('attendance')}
-                      className="clay-btn-white px-3.5 py-1.5 font-bold text-xs rounded-2xl flex items-center cursor-pointer"
-                    >
-                      <UserCheck size={13} className="mr-1.5 text-orange-600" /> Absensi Siswa
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('students')}
-                      className="clay-btn-white px-3.5 py-1.5 font-bold text-xs rounded-2xl flex items-center cursor-pointer"
-                    >
-                      <Users size={13} className="mr-1.5 text-orange-600" /> Data Siswa
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('map')}
-                      className="clay-btn-white px-3.5 py-1.5 font-bold text-xs rounded-2xl flex items-center cursor-pointer"
-                    >
-                      <MapLocationIcon size={13} className="mr-1.5 text-orange-600" /> Peta Sebaran
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('profile')}
-                      className="clay-btn-white px-3.5 py-1.5 font-bold text-xs rounded-2xl flex items-center cursor-pointer"
-                    >
-                      <Settings size={13} className="mr-1.5 text-orange-600" /> Profil Saya
-                    </button>
-                  </div>
-                </div>
-                <div className="shrink-0 hidden md:flex items-center justify-center">
-                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white/80 border-3 border-white shadow-md flex items-center justify-center text-2xl sm:text-3xl">
-                    🎓
-                  </div>
-                </div>
-              </div>
-
               {/* 4 Clay Metric Cards */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
                 <div className="clay-metric-mint p-3 sm:p-3.5 flex items-center justify-between">
@@ -2509,6 +2622,37 @@ export default function Dashboard() {
                   </div>
                   <div className="w-9 h-9 rounded-xl bg-white/90 border border-[#D3E3FD] text-[#29569B] flex items-center justify-center shadow-xs">
                     <Sparkles size={18} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Grafik Demografi & Potensi Siswa (klik -> Data Siswa terfilter) */}
+              <div className="space-y-2">
+                <h3 className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                  <Users size={16} className="text-emerald-600" /> Demografi & Potensi Siswa
+                  <span className="text-[10px] font-semibold text-slate-400">({students.length} siswa)</span>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  <DemoChartCard title="Agama" icon="🕌" type="pie" filterKey="religion" data={buildDistribution(students, 'religion')} onPick={navigateToStudentsWithFilter} />
+                  <DemoChartCard title="Jenis Kelamin" icon="👫" type="pie" filterKey="gender" data={buildDistribution(students, 'gender')} onPick={navigateToStudentsWithFilter} />
+                  <DemoChartCard title="Bakat / Keahlian" icon="🌟" type="bar" filterKey="talents" data={buildDistribution(students, 'talents')} onPick={navigateToStudentsWithFilter} />
+                  <DemoChartCard title="Minat Khusus" icon="🎯" type="bar" filterKey="interests" data={buildDistribution(students, 'interests')} onPick={navigateToStudentsWithFilter} />
+                  <DemoChartCard title="Ekstrakurikuler" icon="🏅" type="bar" filterKey="extracurriculars" data={buildDistribution(students, 'extracurriculars')} onPick={navigateToStudentsWithFilter} />
+                  <DemoChartCard title="Hobi" icon="🎨" type="bar" filterKey="hobbies" data={buildDistribution(students, 'hobbies')} onPick={navigateToStudentsWithFilter} />
+                  <DemoChartCard title="Cita-Cita" icon="🚀" type="bar" filterKey="aspiration" data={buildDistribution(students, 'aspiration')} onPick={navigateToStudentsWithFilter} />
+                  <div className="space-y-1.5 md:col-span-1 xl:col-span-2">
+                    <div className="flex gap-1.5">
+                      {([['suku', 'Suku'], ['blood_type', 'Gol. Darah'], ['parentOccupation', 'Pekerjaan Wali']] as const).map(([k, label]) => (
+                        <button key={k} type="button" onClick={() => setDemoExtraTab(k)}
+                          className={`px-3 py-1 rounded-full text-[11px] font-bold border cursor-pointer ${demoExtraTab === k ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-emerald-50'}`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <DemoChartCard
+                      title={demoExtraTab === 'suku' ? 'Suku / Etnis' : demoExtraTab === 'blood_type' ? 'Golongan Darah' : 'Pekerjaan Orang Tua / Wali'}
+                      icon="📊" type={demoExtraTab === 'blood_type' ? 'pie' : 'bar'} filterKey={demoExtraTab}
+                      data={buildDistribution(students, demoExtraTab)} onPick={navigateToStudentsWithFilter} />
                   </div>
                 </div>
               </div>
@@ -3206,7 +3350,14 @@ export default function Dashboard() {
                   ['jurusan', 'Semua Jurusan', stuOptions.jurusan],
                   ['gender', 'Jenis Kelamin', stuOptions.gender],
                   ['religion', 'Semua Agama', stuOptions.religion],
-                  ['suku', 'Semua Suku', stuOptions.suku]
+                  ['suku', 'Semua Suku', stuOptions.suku],
+                  ['talents', 'Semua Bakat', stuOptions.talents],
+                  ['interests', 'Semua Minat', stuOptions.interests],
+                  ['hobbies', 'Semua Hobi', stuOptions.hobbies],
+                  ['extracurriculars', 'Semua Ekskul', stuOptions.extracurriculars],
+                  ['aspiration', 'Semua Cita-Cita', stuOptions.aspiration],
+                  ['blood_type', 'Gol. Darah', stuOptions.blood_type],
+                  ['parentOccupation', 'Pekerjaan Wali', stuOptions.parentOccupation]
                 ] as [keyof typeof stuFilters, string, string[]][]).map(([key, label, opts]) => (
                   <select
                     key={key}
@@ -3475,6 +3626,13 @@ export default function Dashboard() {
                               Aktivitas
                             </button>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => setChatTarget({ student: loc.student, locationName: loc.locationName })}
+                            className="w-full py-1 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded text-center cursor-pointer border border-emerald-200 flex items-center justify-center gap-1"
+                          >
+                            💬 Chat / Kirim Notifikasi
+                          </button>
                           <a
                             href={`https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}`}
                             target="_blank"
@@ -3553,6 +3711,16 @@ export default function Dashboard() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  setChatTarget({ student: loc.student, locationName: loc.locationName });
+                                }}
+                                className="p-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer"
+                                title="Chat / Notifikasi ke HP Siswa"
+                              >
+                                <MessageCircle size={12} />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   openStudentBiodata(loc.student);
                                 }}
                                 className="clay-btn-white px-2 py-1 text-[9px] font-bold rounded-lg"
@@ -3571,6 +3739,15 @@ export default function Dashboard() {
             </div>
             </div>
           </section>
+        )}
+
+        {/* ================= TAB: KUIS EDUKASI ================= */}
+        {activeTab === 'quiz' && (
+          <QuizStudio
+            hostName={teacherProfile?.full_name || 'Guru'}
+            classes={Array.from(new Set(allStudentsRaw.map((st: any) => st.kelas).filter(Boolean))) as string[]}
+            readOnly={isReadOnly}
+          />
         )}
 
         {/* ================= TAB 5: PROFIL GURU ================= */}
@@ -4316,25 +4493,61 @@ export default function Dashboard() {
                 <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">{selectedActivity.description || 'Tidak ada deskripsi.'}</p>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-slate-700 text-center mb-1.5 uppercase tracking-wider">
-                  Rating Bintang
-                </label>
-                <div className="flex justify-center space-x-1.5">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setEvaluation({ ...evaluation, rating: star })}
-                      className={`p-1.5 transition-transform cursor-pointer ${
-                        evaluation.rating >= star ? 'scale-115 text-amber-500' : 'text-slate-300 hover:scale-110'
-                      }`}
-                    >
-                      <Star size={30} fill={evaluation.rating >= star ? "#f59e0b" : "none"} />
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {(() => {
+                const meaning = getKaihMeaning(selectedActivity.activity_categories?.name || selectedActivity.title || '');
+                const disc = getDisciplineInfo(selectedActivity);
+                const discColor = disc.level === 'high' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : disc.level === 'mid' ? 'bg-amber-50 border-amber-200 text-amber-800' : disc.level === 'low' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-slate-50 border-slate-200 text-slate-600';
+                return (
+                  <>
+                    {meaning && (
+                      <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 space-y-1">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">{meaning.icon} Makna Kegiatan</p>
+                        <p className="text-[11px] text-slate-700 leading-snug">{meaning.meaning}</p>
+                        <p className="text-[10px] text-slate-500 leading-snug"><b>Indikator:</b> {meaning.indicator}</p>
+                      </div>
+                    )}
+                    <div className={`rounded-xl border p-2.5 text-[11px] font-semibold flex flex-wrap items-center justify-between gap-1 ${discColor}`}>
+                      <span>⏱️ Rencana {selectedActivity.plannedTime || '-'} → Realisasi {selectedActivity.realizedTime || '-'}</span>
+                      <span className="font-black">
+                        {disc.label}{disc.score !== null ? ` (${disc.score})` : ''}{disc.delta !== null && disc.delta > 0 ? ` • +${disc.delta} mnt` : ''}
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider">Rincian Penilaian</label>
+                      {([['waktu', 'Ketepatan Waktu (Disiplin)'], ['kualitas', 'Kualitas Pelaksanaan & Bukti'], ['konsistensi', 'Konsistensi Kebiasaan']] as const).map(([k, label]) => (
+                        <div key={k} className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-semibold text-slate-700">{label}</span>
+                          <div className="flex">
+                            {[1, 2, 3, 4, 5].map(star => (
+                              <button key={star} type="button" onClick={() => updateAspect(k, star)}
+                                className={`p-0.5 cursor-pointer ${evalAspects[k] >= star ? 'text-amber-500' : 'text-slate-300'}`}>
+                                <Star size={20} fill={evalAspects[k] >= star ? '#f59e0b' : 'none'} />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      <p className="text-[11px] text-center font-black text-amber-700 bg-amber-50 border border-amber-200 rounded-lg py-1">
+                        Nilai Akhir: {evaluation.rating || 0} / 5 ⭐
+                      </p>
+                    </div>
+                    {meaning && (
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider">Saran Cepat (1 klik)</label>
+                        <div className="flex flex-wrap gap-1">
+                          {[...(evaluation.rating >= 4 ? meaning.advice.high : evaluation.rating === 3 ? meaning.advice.mid : meaning.advice.low),
+                            ...(disc.level === 'low' ? ['Usahakan melaksanakan kegiatan sesuai jam yang direncanakan.'] : [])].map((t, i) => (
+                            <button key={i} type="button" onClick={() => appendAdvice(t)}
+                              className="text-left text-[10px] font-semibold bg-white border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 rounded-lg px-2 py-1 cursor-pointer">
+                              + {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
@@ -4664,6 +4877,18 @@ export default function Dashboard() {
         </div>
       )}
 
+
+      {/* Chat / notifikasi dari Peta Sebaran ke HP siswa */}
+      {chatTarget && (
+        <MapChatDrawer
+          student={chatTarget.student}
+          locationName={chatTarget.locationName}
+          senderName={teacherProfile?.full_name || 'Guru'}
+          senderRole={currentUserRole === 'admin' ? 'admin' : 'guru'}
+          readOnly={isReadOnly}
+          onClose={() => setChatTarget(null)}
+        />
+      )}
     </div>
   );
 }
