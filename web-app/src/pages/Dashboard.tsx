@@ -430,6 +430,8 @@ export default function Dashboard() {
   const [schoolLocation, setSchoolLocation] = useState<SchoolLocationConfig>(DEFAULT_SCHOOL_CONFIG);
   const [isRankingReportOpen, setIsRankingReportOpen] = useState(false);
   const [rankingClassFilter, setRankingClassFilter] = useState('Semua');
+  const [rankingReportTab, setRankingReportTab] = useState<'general' | 'discipline' | 'quiz'>('general');
+  const [allQuizSubmissions, setAllQuizSubmissions] = useState<any[]>([]);
 
   // Profile Form States
   const [profileForm, setProfileForm] = useState({ fullName: '', photoUrl: '', newPassword: '', confirmPassword: '' });
@@ -627,6 +629,14 @@ export default function Dashboard() {
 
     // 3. Fetch evaluations
     const { data: evalData } = await supabase.from('evaluations').select('id, activity_id, rating, comment');
+
+    // 3b. Fetch quiz submissions for Quiz Ranking Report
+    try {
+      const { data: qSubs } = await supabase.from('quiz_submissions').select('*');
+      if (qSubs) setAllQuizSubmissions(qSubs);
+    } catch (e) {
+      console.warn("Quiz submissions fetch error:", e);
+    }
 
     if (actData) {
       const rawMerged = actData.map(act => {
@@ -1579,6 +1589,122 @@ export default function Dashboard() {
     });
   }, [students, activities, attendanceRecords, rankingClassFilter]);
 
+  // Ranking Kedisiplinan Waktu Siswa (Time Discipline Analysis)
+  const disciplineRankingData = useMemo(() => {
+    return students.map((s) => {
+      const studentActs = activities.filter((a) => (a.students?.id || a.student_id) === s.id);
+      const timedActs = studentActs.filter((a) => a.kaihStatus === 'REALISASI' && a.plannedTime && a.realizedTime);
+      
+      let totalKaihScore = 0;
+      let totalLateMins = 0;
+      let onTimeCount = 0;
+
+      timedActs.forEach((act) => {
+        const info = getDisciplineInfo(act);
+        totalKaihScore += (info.score || 75);
+        const late = Math.max(0, info.delta || 0);
+        totalLateMins += late;
+        if (info.level === 'high') onTimeCount++;
+      });
+
+      const avgKaihScore = timedActs.length > 0 ? Math.round(totalKaihScore / timedActs.length) : 75;
+      const avgLateMins = timedActs.length > 0 ? Math.round(totalLateMins / timedActs.length) : 0;
+      const onTimeRate = timedActs.length > 0 ? Math.round((onTimeCount / timedActs.length) * 100) : 0;
+
+      const rec = attendanceRecords[s.id];
+      let attScore = 75;
+      if (rec?.status === 'Tepat Waktu') attScore = 100;
+      else if (rec?.status === 'Terlambat') attScore = 80;
+      else if (rec?.status === 'Izin' || rec?.status === 'Sakit') attScore = 70;
+      else if (rec?.status === 'Alpha') attScore = 0;
+
+      const finalDisciplineScore = Math.round((avgKaihScore * 0.6) + (attScore * 0.4));
+
+      let predicate = 'Perlu Bimbingan ⚠️';
+      if (finalDisciplineScore >= 90) predicate = 'Sangat Teladan 🌟';
+      else if (finalDisciplineScore >= 80) predicate = 'Disiplin Tinggi ⭐';
+      else if (finalDisciplineScore >= 70) predicate = 'Cukup Disiplin 👍';
+
+      return {
+        student: s,
+        timedActsCount: timedActs.length,
+        avgLateMins,
+        onTimeRate,
+        avgKaihScore,
+        attendanceStatus: rec?.status || 'Belum Diabsen',
+        attScore,
+        finalScore: finalDisciplineScore,
+        predicate,
+      };
+    })
+    .filter((item) => {
+      if (rankingClassFilter === 'Semua') return true;
+      const cls = item.student.kelas || item.student.education_level || '';
+      return cls === rankingClassFilter;
+    })
+    .sort((a, b) => {
+      if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
+      if (b.onTimeRate !== a.onTimeRate) return b.onTimeRate - a.onTimeRate;
+      return (a.student.name || '').localeCompare(b.student.name || '', 'id');
+    });
+  }, [students, activities, attendanceRecords, rankingClassFilter]);
+
+  // Ranking Prestasi Kuis Edukasi Siswa (Quiz Arena Ranking)
+  const quizRankingData = useMemo(() => {
+    const subMap: Record<string, { totalScore: number; quizCount: number; correctCount: number; totalQuestions: number; bestScore: number }> = {};
+    
+    allQuizSubmissions.forEach((sub) => {
+      const sId = sub.student_id;
+      if (!sId) return;
+      if (!subMap[sId]) {
+        subMap[sId] = { totalScore: 0, quizCount: 0, correctCount: 0, totalQuestions: 0, bestScore: 0 };
+      }
+      subMap[sId].totalScore += (Number(sub.score) || 0);
+      subMap[sId].quizCount += 1;
+      subMap[sId].correctCount += (Number(sub.correct_count) || 0);
+      subMap[sId].totalQuestions += (Number(sub.total_count) || 0);
+      if ((Number(sub.score) || 0) > subMap[sId].bestScore) {
+        subMap[sId].bestScore = Number(sub.score) || 0;
+      }
+    });
+
+    return students.map((s) => {
+      const stats = subMap[s.id] || { totalScore: 0, quizCount: 0, correctCount: 0, totalQuestions: 0, bestScore: 0 };
+      const accuracy = stats.totalQuestions > 0 ? Math.round((stats.correctCount / stats.totalQuestions) * 100) : 0;
+      
+      let predicate = 'Belum Ikut Kuis 💡';
+      if (stats.quizCount > 0) {
+        if (stats.totalScore >= 2000 || accuracy >= 85) predicate = 'Master Kuis 🏆';
+        else if (stats.totalScore >= 1200 || accuracy >= 70) predicate = 'Juara Kuis 🌟';
+        else if (stats.totalScore >= 500) predicate = 'Peserta Aktif ⭐';
+        else predicate = 'Perlu Belajar Lebih Semangat 👍';
+      }
+
+      return {
+        student: s,
+        totalScore: stats.totalScore,
+        quizCount: stats.quizCount,
+        correctCount: stats.correctCount,
+        totalQuestions: stats.totalQuestions,
+        accuracy,
+        bestScore: stats.bestScore,
+        finalScore: stats.totalScore,
+        predicate,
+      };
+    })
+    .filter((item) => {
+      if (rankingClassFilter === 'Semua') return true;
+      const cls = item.student.kelas || item.student.education_level || '';
+      return cls === rankingClassFilter;
+    })
+    .sort((a, b) => {
+      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+      if (b.accuracy !== a.accuracy) return b.accuracy - a.accuracy;
+      if (b.quizCount !== a.quizCount) return b.quizCount - a.quizCount;
+      return (a.student.name || '').localeCompare(b.student.name || '', 'id');
+    });
+  }, [students, allQuizSubmissions, rankingClassFilter]);
+
   // Activities to display inside popup
   const popupActivities = useMemo(() => {
     if (!selectedStudentForPopup) return [];
@@ -2056,6 +2182,268 @@ export default function Dashboard() {
 </html>`);
     printWindow.document.close();
     setTimeout(() => { printWindow.print(); }, 400);
+  };
+
+  const handlePrintDisciplineReport = () => {
+    const printWindow = window.open('', '_blank', 'width=950,height=1000');
+    if (!printWindow) return;
+
+    const todayStr = new Date().toLocaleDateString('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    const rowsHtml = disciplineRankingData.map((item, idx) => {
+      const rankBadge = idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`;
+      return `
+        <tr>
+          <td style="text-align: center; font-weight: bold;">${rankBadge}</td>
+          <td style="text-align: center;">${item.student.nisn || item.student.nis || '-'}</td>
+          <td><b>${item.student.name}</b></td>
+          <td style="text-align: center;">${item.student.kelas || item.student.education_level || '-'}</td>
+          <td style="text-align: center; font-weight: bold; color: #047857;">${item.timedActsCount} kegiatan</td>
+          <td style="text-align: center; color: ${item.avgLateMins <= 15 ? '#047857' : '#b45309'}; font-weight: bold;">${item.avgLateMins} mnt</td>
+          <td style="text-align: center; font-weight: bold; color: #2563eb;">${item.onTimeRate}%</td>
+          <td style="text-align: center;">${item.attendanceStatus}</td>
+          <td style="text-align: center; font-weight: bold; font-size: 13px; color: #0f172a;">${item.finalScore}</td>
+          <td style="text-align: center; font-weight: bold;">${item.predicate}</td>
+        </tr>
+      `;
+    }).join('');
+
+    printWindow.document.write(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Laporan Resmi Analisis Kedisiplinan Waktu & Perangkingan Siswa</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm; }
+    body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; line-height: 1.3; }
+    .kop { display: flex; align-items: center; justify-content: center; border-bottom: 3px double #000; padding-bottom: 8px; margin-bottom: 12px; }
+    .kop-text { text-align: center; flex: 1; }
+    .kop-text h2 { margin: 0; font-size: 15pt; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kop-text h3 { margin: 2px 0; font-size: 13pt; text-transform: uppercase; }
+    .kop-text p { margin: 1px 0; font-size: 9pt; }
+    .title-doc { text-align: center; margin: 14px 0 10px 0; }
+    .title-doc h4 { margin: 0; font-size: 12pt; text-decoration: underline; text-transform: uppercase; }
+    .meta-table { width: 100%; margin-bottom: 12px; font-size: 10pt; }
+    .meta-table td { padding: 2px 4px; }
+    table.data-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 9.5pt; }
+    table.data-table th, table.data-table td { border: 1px solid #333; padding: 6px 8px; }
+    table.data-table th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
+    .ttd-container { margin-top: 35px; display: flex; justify-content: space-between; page-break-inside: avoid; font-size: 10pt; }
+    .ttd-box { width: 220px; text-align: center; }
+    .ttd-line { margin-top: 65px; border-top: 1px solid #333; font-weight: bold; padding-top: 4px; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="kop">
+    <div class="kop-text">
+      <h2>${schoolLocation.name.toUpperCase()}</h2>
+      <h3>LAPORAN EVALUASI & ANALISIS KEDISIPLINAN SISWA</h3>
+      <p>${schoolLocation.address} ${schoolLocation.phone ? '| Telp: ' + schoolLocation.phone : ''}</p>
+    </div>
+  </div>
+
+  <div class="title-doc">
+    <h4>LAPORAN ANALISIS KEDISIPLINAN WAKTU & PERANGKINGAN SISWA</h4>
+  </div>
+
+  <table class="meta-table">
+    <tr>
+      <td width="20%"><b>Filter Kelas</b></td>
+      <td width="30%">: ${rankingClassFilter === 'Semua' ? 'Seluruh Kelas' : rankingClassFilter}</td>
+      <td width="20%"><b>Tanggal Cetak</b></td>
+      <td width="30%">: ${todayStr}</td>
+    </tr>
+    <tr>
+      <td><b>Total Siswa</b></td>
+      <td>: ${disciplineRankingData.length} Orang</td>
+      <td><b>Bobot Evaluasi</b></td>
+      <td>: Ketepatan Jam 7 KAIH Δt (60%) + Presensi Harian (40%)</td>
+    </tr>
+  </table>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th width="7%">Rank</th>
+        <th width="11%">NISN</th>
+        <th width="22%">Nama Siswa</th>
+        <th width="12%">Kelas</th>
+        <th width="10%">Kegiatan Terjadwal</th>
+        <th width="10%">Rata-rata Δt</th>
+        <th width="10%">Tepat Waktu</th>
+        <th width="10%">Presensi</th>
+        <th width="8%">Skor</th>
+        <th width="15%">Predikat</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+
+  <div class="ttd-container">
+    <div class="ttd-box">
+      <p>Mengetahui,</p>
+      <p><b>Kepala Sekolah</b></p>
+      <div class="ttd-line">Drs. H. Syahrul, M.Pd</div>
+      <p style="font-size: 8.5pt; margin-top: 2px;">NIP. 19680512 199303 1 004</p>
+    </div>
+
+    <div class="ttd-box">
+      <p>Binjai, ${todayStr}</p>
+      <p><b>Tim Pembina Karakter & Kedisiplinan</b></p>
+      <div class="ttd-line">${teacherProfile?.full_name || 'Pembina Kedisiplinan'}</div>
+      <p style="font-size: 8.5pt; margin-top: 2px;">Wali Kelas / Guru Pembina</p>
+    </div>
+  </div>
+</body>
+</html>`);
+
+    printWindow.document.close();
+    setTimeout(() => { printWindow.print(); }, 400);
+  };
+
+  const handlePrintQuizReport = () => {
+    const printWindow = window.open('', '_blank', 'width=950,height=1000');
+    if (!printWindow) return;
+
+    const todayStr = new Date().toLocaleDateString('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    const rowsHtml = quizRankingData.map((item, idx) => {
+      const rankBadge = idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`;
+      return `
+        <tr>
+          <td style="text-align: center; font-weight: bold;">${rankBadge}</td>
+          <td style="text-align: center;">${item.student.nisn || item.student.nis || '-'}</td>
+          <td><b>${item.student.name}</b></td>
+          <td style="text-align: center;">${item.student.kelas || item.student.education_level || '-'}</td>
+          <td style="text-align: center; font-weight: bold; color: #4338ca; font-size: 12px;">${item.totalScore.toLocaleString('id-ID')}</td>
+          <td style="text-align: center;">${item.quizCount} Kuis</td>
+          <td style="text-align: center; font-weight: bold; color: #047857;">${item.correctCount} / ${item.totalQuestions}</td>
+          <td style="text-align: center; font-weight: bold; color: #2563eb;">${item.accuracy}%</td>
+          <td style="text-align: center;">${item.bestScore}</td>
+          <td style="text-align: center; font-weight: bold;">${item.predicate}</td>
+        </tr>
+      `;
+    }).join('');
+
+    printWindow.document.write(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Laporan Resmi Prestasi Kuis Edukasi & Perangkingan Siswa</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm; }
+    body { font-family: 'Times New Roman', serif; font-size: 11pt; color: #111; line-height: 1.3; }
+    .kop { display: flex; align-items: center; justify-content: center; border-bottom: 3px double #000; padding-bottom: 8px; margin-bottom: 12px; }
+    .kop-text { text-align: center; flex: 1; }
+    .kop-text h2 { margin: 0; font-size: 15pt; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kop-text h3 { margin: 2px 0; font-size: 13pt; text-transform: uppercase; }
+    .kop-text p { margin: 1px 0; font-size: 9pt; }
+    .title-doc { text-align: center; margin: 14px 0 10px 0; }
+    .title-doc h4 { margin: 0; font-size: 12pt; text-decoration: underline; text-transform: uppercase; }
+    .meta-table { width: 100%; margin-bottom: 12px; font-size: 10pt; }
+    .meta-table td { padding: 2px 4px; }
+    table.data-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 9.5pt; }
+    table.data-table th, table.data-table td { border: 1px solid #333; padding: 6px 8px; }
+    table.data-table th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
+    .ttd-container { margin-top: 35px; display: flex; justify-content: space-between; page-break-inside: avoid; font-size: 10pt; }
+    .ttd-box { width: 220px; text-align: center; }
+    .ttd-line { margin-top: 65px; border-top: 1px solid #333; font-weight: bold; padding-top: 4px; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="kop">
+    <div class="kop-text">
+      <h2>${schoolLocation.name.toUpperCase()}</h2>
+      <h3>LAPORAN PRESTASI GAME KUIS EDUKASI & KAIH ARENA</h3>
+      <p>${schoolLocation.address} ${schoolLocation.phone ? '| Telp: ' + schoolLocation.phone : ''}</p>
+    </div>
+  </div>
+
+  <div class="title-doc">
+    <h4>LAPORAN PRESTASI KUIS EDUKASI & PERANGKINGAN SISWA</h4>
+  </div>
+
+  <table class="meta-table">
+    <tr>
+      <td width="20%"><b>Filter Kelas</b></td>
+      <td width="30%">: ${rankingClassFilter === 'Semua' ? 'Seluruh Kelas' : rankingClassFilter}</td>
+      <td width="20%"><b>Tanggal Cetak</b></td>
+      <td width="30%">: ${todayStr}</td>
+    </tr>
+    <tr>
+      <td><b>Total Siswa</b></td>
+      <td>: ${quizRankingData.length} Orang</td>
+      <td><b>Metrik Penilaian</b></td>
+      <td>: Total Akumulasi Poin Kuis Live + Akurasi Jawaban Benar</td>
+    </tr>
+  </table>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th width="7%">Rank</th>
+        <th width="11%">NISN</th>
+        <th width="23%">Nama Siswa</th>
+        <th width="12%">Kelas</th>
+        <th width="11%">Total Poin</th>
+        <th width="8%">Kuis</th>
+        <th width="10%">Benar/Soal</th>
+        <th width="9%">Akurasi</th>
+        <th width="9%">Best Poin</th>
+        <th width="15%">Predikat</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+
+  <div class="ttd-container">
+    <div class="ttd-box">
+      <p>Mengetahui,</p>
+      <p><b>Kepala Sekolah</b></p>
+      <div class="ttd-line">Drs. H. Syahrul, M.Pd</div>
+      <p style="font-size: 8.5pt; margin-top: 2px;">NIP. 19680512 199303 1 004</p>
+    </div>
+
+    <div class="ttd-box">
+      <p>Binjai, ${todayStr}</p>
+      <p><b>Guru Pembina Kuis Edukasi</b></p>
+      <div class="ttd-line">${teacherProfile?.full_name || 'Pembina Kuis Edukasi'}</div>
+      <p style="font-size: 8.5pt; margin-top: 2px;">Guru Pengajar / Pembina</p>
+    </div>
+  </div>
+</body>
+</html>`);
+
+    printWindow.document.close();
+    setTimeout(() => { printWindow.print(); }, 400);
+  };
+
+  const handlePrintReport = () => {
+    if (rankingReportTab === 'discipline') {
+      handlePrintDisciplineReport();
+    } else if (rankingReportTab === 'quiz') {
+      handlePrintQuizReport();
+    } else {
+      handlePrintRankingReport();
+    }
   };
 
   const handlePrintRankingReport = () => {
@@ -4643,15 +5031,29 @@ export default function Dashboard() {
             {/* Modal Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center font-black shadow-md">
-                  <Award size={26} />
+                <div className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center font-black shadow-md ${
+                  rankingReportTab === 'discipline'
+                    ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
+                    : rankingReportTab === 'quiz'
+                    ? 'bg-gradient-to-br from-indigo-500 to-purple-600'
+                    : 'bg-gradient-to-br from-amber-500 to-orange-600'
+                }`}>
+                  {rankingReportTab === 'discipline' ? <Clock size={24} /> : rankingReportTab === 'quiz' ? <Gamepad2 size={24} /> : <Award size={26} />}
                 </div>
                 <div>
                   <h2 className="text-lg sm:text-xl font-black text-slate-900">
-                    Laporan Analisis Karakter & Perangkingan Siswa
+                    {rankingReportTab === 'discipline'
+                      ? 'Laporan Analisis & Ranking Kedisiplinan Siswa'
+                      : rankingReportTab === 'quiz'
+                      ? 'Laporan Prestasi & Ranking Kuis Edukasi Siswa'
+                      : 'Laporan Analisis Karakter 7 KAIH & Perangkingan Siswa'}
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Perangkingan komprehensif berdasarkan 7 KAIH (40%), Penilaian Guru (40%), dan Presensi (20%)
+                    {rankingReportTab === 'discipline'
+                      ? 'Evaluasi ketepatan waktu rencana vs realisasi 7 KAIH (Δt) dan presensi harian siswa'
+                      : rankingReportTab === 'quiz'
+                      ? 'Peringkat akumulasi perolehan skor, akurasi jawaban, dan keaktifan kuis live di HP siswa'
+                      : 'Perangkingan komprehensif berdasarkan 7 KAIH (40%), Penilaian Guru (40%), dan Presensi (20%)'}
                   </p>
                 </div>
               </div>
@@ -4659,11 +5061,24 @@ export default function Dashboard() {
               <div className="flex items-center gap-2 self-end sm:self-center">
                 <button
                   type="button"
-                  onClick={handlePrintRankingReport}
-                  className="clay-btn-coral px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  onClick={handlePrintReport}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors ${
+                    rankingReportTab === 'discipline'
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : rankingReportTab === 'quiz'
+                      ? 'bg-indigo-600 hover:bg-indigo-700'
+                      : 'bg-amber-600 hover:bg-amber-700'
+                  }`}
+                  title="Cetak Dokumen Resmi PDF"
                 >
                   <Printer size={15} />
-                  <span>Cetak Dokumen PDF Resmi</span>
+                  <span>
+                    {rankingReportTab === 'discipline'
+                      ? 'Cetak PDF Kedisiplinan'
+                      : rankingReportTab === 'quiz'
+                      ? 'Cetak PDF Prestasi Kuis'
+                      : 'Cetak Dokumen PDF Resmi'}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -4675,7 +5090,49 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Filter Kelas & Ringkasan Metrik */}
+            {/* Menu Navigasi Pemisah Halaman: Karakter Umum | Kedisiplinan | Kuis Edukasi */}
+            <div className="flex flex-wrap items-center gap-2 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setRankingReportTab('general')}
+                className={`flex-1 min-w-[170px] py-2 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                  rankingReportTab === 'general'
+                    ? 'bg-white text-amber-700 shadow-sm border border-amber-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Award size={15} className={rankingReportTab === 'general' ? 'text-amber-500' : ''} />
+                <span>1. Karakter 7 KAIH (Umum)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRankingReportTab('discipline')}
+                className={`flex-1 min-w-[170px] py-2 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                  rankingReportTab === 'discipline'
+                    ? 'bg-white text-emerald-800 shadow-sm border border-emerald-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Clock size={15} className={rankingReportTab === 'discipline' ? 'text-emerald-600' : ''} />
+                <span>2. Analisis Kedisiplinan Waktu</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRankingReportTab('quiz')}
+                className={`flex-1 min-w-[170px] py-2 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                  rankingReportTab === 'quiz'
+                    ? 'bg-white text-indigo-800 shadow-sm border border-indigo-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Gamepad2 size={15} className={rankingReportTab === 'quiz' ? 'text-indigo-600' : ''} />
+                <span>3. Peringkat Kuis Edukasi</span>
+              </button>
+            </div>
+
+            {/* Filter Kelas & Ringkasan Metrik Terpilih */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-700">Filter Kelas:</span>
@@ -4692,171 +5149,548 @@ export default function Dashboard() {
               </div>
 
               <div className="flex items-center gap-3 text-xs">
-                <span className="font-bold text-slate-600">
-                  Total: <b className="text-emerald-700 font-black">{rankingData.length}</b> Siswa Teranalisis
-                </span>
-                <span className="text-slate-300">•</span>
-                <span className="font-bold text-slate-600">
-                  Rata-rata Skor: <b className="text-blue-700 font-black">{Math.round(rankingData.reduce((acc, r) => acc + r.finalScore, 0) / (rankingData.length || 1))}</b> / 100
-                </span>
+                {rankingReportTab === 'discipline' ? (
+                  <>
+                    <span className="font-bold text-slate-600">
+                      Total: <b className="text-emerald-700 font-black">{disciplineRankingData.length}</b> Siswa Teranalisa
+                    </span>
+                    <span className="text-slate-300">•</span>
+                    <span className="font-bold text-slate-600">
+                      Rata-rata Disiplin: <b className="text-emerald-700 font-black">{Math.round(disciplineRankingData.reduce((acc, r) => acc + r.finalScore, 0) / (disciplineRankingData.length || 1))}</b> / 100
+                    </span>
+                  </>
+                ) : rankingReportTab === 'quiz' ? (
+                  <>
+                    <span className="font-bold text-slate-600">
+                      Peserta Kuis: <b className="text-indigo-700 font-black">{quizRankingData.filter(q => q.quizCount > 0).length}</b> / {quizRankingData.length} Siswa
+                    </span>
+                    <span className="text-slate-300">•</span>
+                    <span className="font-bold text-slate-600">
+                      Total Poin Kelas: <b className="text-indigo-700 font-black">{quizRankingData.reduce((acc, r) => acc + r.totalScore, 0).toLocaleString('id-ID')}</b>
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-bold text-slate-600">
+                      Total: <b className="text-emerald-700 font-black">{rankingData.length}</b> Siswa Teranalisis
+                    </span>
+                    <span className="text-slate-300">•</span>
+                    <span className="font-bold text-slate-600">
+                      Rata-rata Skor: <b className="text-amber-700 font-black">{Math.round(rankingData.reduce((acc, r) => acc + r.finalScore, 0) / (rankingData.length || 1))}</b> / 100
+                    </span>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Podium 3 Besar Juara Karakter */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-              {/* Juara 2 (Perak) */}
-              {rankingData[1] && (
-                <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-100 via-slate-50 to-white border-2 border-slate-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1">
-                  <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-slate-400 text-white font-black text-xs shadow-xs">
-                    🥈 JUARA 2
-                  </span>
-                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-slate-300 shadow-xs mt-2 mb-2">
-                    {rankingData[1].student.photo_url ? (
-                      <img src={rankingData[1].student.photo_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-slate-300 text-slate-700 font-black flex items-center justify-center">
-                        {getInitials(rankingData[1].student.name)}
-                      </div>
-                    )}
-                  </div>
-                  <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-full">{rankingData[1].student.name}</h4>
-                  <p className="text-[11px] text-slate-500">{rankingData[1].student.kelas || 'Siswa'}</p>
-                  <div className="mt-2 text-xs font-black text-slate-700 bg-slate-200/80 px-3 py-1 rounded-xl">
-                    Skor: {rankingData[1].finalScore} / 100
-                  </div>
-                </div>
-              )}
-
-              {/* Juara 1 (Emas) */}
-              {rankingData[0] && (
-                <div className="p-5 rounded-2xl bg-gradient-to-b from-amber-100 via-amber-50 to-white border-2 border-amber-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105">
-                  <span className="absolute -top-3.5 px-3.5 py-1 rounded-full bg-gradient-to-r from-amber-500 to-yellow-500 text-white font-black text-xs shadow-xs">
-                    🥇 JUARA 1 UTAMA
-                  </span>
-                  <div className="w-20 h-20 rounded-full overflow-hidden border-3 border-amber-400 shadow-md mt-2 mb-2 ring-4 ring-amber-200">
-                    {rankingData[0].student.photo_url ? (
-                      <img src={rankingData[0].student.photo_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-amber-400 text-amber-900 font-black text-xl flex items-center justify-center">
-                        {getInitials(rankingData[0].student.name)}
-                      </div>
-                    )}
-                  </div>
-                  <h4 className="font-black text-slate-900 text-base truncate max-w-full">{rankingData[0].student.name}</h4>
-                  <p className="text-xs font-bold text-amber-800">{rankingData[0].student.kelas || 'Siswa'}</p>
-                  <div className="mt-2 text-sm font-black text-amber-900 bg-amber-200/90 px-4 py-1.5 rounded-2xl border border-amber-300">
-                    Skor Tertinggi: {rankingData[0].finalScore} / 100
-                  </div>
-                </div>
-              )}
-
-              {/* Juara 3 (Perunggu) */}
-              {rankingData[2] && (
-                <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-50/60 via-orange-50/30 to-white border-2 border-amber-600/40 shadow-xs flex flex-col items-center text-center relative order-3">
-                  <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-amber-700 text-white font-black text-xs shadow-xs">
-                    🥉 JUARA 3
-                  </span>
-                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-600/50 shadow-xs mt-2 mb-2">
-                    {rankingData[2].student.photo_url ? (
-                      <img src={rankingData[2].student.photo_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-amber-700/20 text-amber-900 font-black flex items-center justify-center">
-                        {getInitials(rankingData[2].student.name)}
-                      </div>
-                    )}
-                  </div>
-                  <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-full">{rankingData[2].student.name}</h4>
-                  <p className="text-[11px] text-slate-500">{rankingData[2].student.kelas || 'Siswa'}</p>
-                  <div className="mt-2 text-xs font-black text-amber-800 bg-amber-100/80 px-3 py-1 rounded-xl">
-                    Skor: {rankingData[2].finalScore} / 100
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Grafik Top 10 Siswa */}
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
-              <h4 className="text-xs font-extrabold text-slate-900">
-                📊 Grafik Perbandingan Skor Karakter Top 10 Siswa
-              </h4>
-              <div className="h-56 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={rankingData.slice(0, 10).map((r) => ({ name: r.student.name.split(' ')[0], skor: r.finalScore, realisasi: r.realizedCount }))}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 'bold' }} stroke="#64748B" />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="#64748B" />
-                    <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                    <Bar dataKey="skor" name="Skor Karakter" fill="#F59E0B" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Tabel Peringkat Lengkap */}
-            <div className="border border-slate-200 rounded-2xl overflow-hidden">
-              <div className="max-h-80 overflow-y-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 font-extrabold sticky top-0">
-                    <tr>
-                      <th className="px-3.5 py-2.5 text-center">Rank</th>
-                      <th className="px-3.5 py-2.5">Siswa</th>
-                      <th className="px-3.5 py-2.5">Kelas</th>
-                      <th className="px-3.5 py-2.5 text-center">7 KAIH</th>
-                      <th className="px-3.5 py-2.5 text-center">Guru ⭐</th>
-                      <th className="px-3.5 py-2.5 text-center">Presensi</th>
-                      <th className="px-3.5 py-2.5 text-center">Skor Akhir</th>
-                      <th className="px-3.5 py-2.5 text-center">Predikat</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium">
-                    {rankingData.map((item, idx) => (
-                      <tr key={item.student.id} className="hover:bg-amber-50/40 transition-colors">
-                        <td className="px-3.5 py-2.5 text-center font-black">
-                          {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`}
-                        </td>
-                        <td className="px-3.5 py-2.5">
-                          <div className="flex items-center gap-2">
-                            {item.student.photo_url ? (
-                              <img src={item.student.photo_url} alt="" className="w-6 h-6 rounded-full object-cover" />
-                            ) : (
-                              <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center">
-                                {getInitials(item.student.name)}
-                              </div>
-                            )}
-                            <div>
-                              <span className="font-bold text-slate-900 block">{item.student.name}</span>
-                              <span className="text-[10px] text-slate-400">NISN: {item.student.nisn || '-'}</span>
-                            </div>
+            {/* ================= VIEW 1: RANKING KARAKTER 7 KAIH UMUM ================= */}
+            {rankingReportTab === 'general' && (
+              <div className="space-y-5">
+                {/* Podium 3 Besar Juara Karakter */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                  {/* Juara 2 (Perak) */}
+                  {rankingData[1] && (
+                    <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-100 via-slate-50 to-white border-2 border-slate-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1">
+                      <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-slate-400 text-white font-black text-xs shadow-xs">
+                        🥈 JUARA 2
+                      </span>
+                      <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-slate-300 shadow-xs mt-2 mb-2">
+                        {rankingData[1].student.photo_url ? (
+                          <img src={rankingData[1].student.photo_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-slate-300 text-slate-700 font-black flex items-center justify-center">
+                            {getInitials(rankingData[1].student.name)}
                           </div>
-                        </td>
-                        <td className="px-3.5 py-2.5 text-slate-700">{item.student.kelas || '-'}</td>
-                        <td className="px-3.5 py-2.5 text-center font-bold text-emerald-700">
-                          {item.realizedCount} / 7
-                        </td>
-                        <td className="px-3.5 py-2.5 text-center font-bold text-amber-700">
-                          ⭐ {item.avgRating}
-                        </td>
-                        <td className="px-3.5 py-2.5 text-center">
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700">
-                            {item.attendanceStatus}
-                          </span>
-                        </td>
-                        <td className="px-3.5 py-2.5 text-center">
-                          <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-amber-100 text-amber-900 border border-amber-200">
-                            {item.finalScore}
-                          </span>
-                        </td>
-                        <td className="px-3.5 py-2.5 text-center">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                            {item.predicate}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        )}
+                      </div>
+                      <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-full">{rankingData[1].student.name}</h4>
+                      <p className="text-[11px] text-slate-500">{rankingData[1].student.kelas || 'Siswa'}</p>
+                      <div className="mt-2 text-xs font-black text-slate-700 bg-slate-200/80 px-3 py-1 rounded-xl">
+                        Skor: {rankingData[1].finalScore} / 100
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Juara 1 (Emas) */}
+                  {rankingData[0] && (
+                    <div className="p-5 rounded-2xl bg-gradient-to-b from-amber-100 via-amber-50 to-white border-2 border-amber-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105">
+                      <span className="absolute -top-3.5 px-3.5 py-1 rounded-full bg-gradient-to-r from-amber-500 to-yellow-500 text-white font-black text-xs shadow-xs">
+                        🥇 JUARA 1 UTAMA
+                      </span>
+                      <div className="w-20 h-20 rounded-full overflow-hidden border-3 border-amber-400 shadow-md mt-2 mb-2 ring-4 ring-amber-200">
+                        {rankingData[0].student.photo_url ? (
+                          <img src={rankingData[0].student.photo_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-amber-400 text-amber-900 font-black text-xl flex items-center justify-center">
+                            {getInitials(rankingData[0].student.name)}
+                          </div>
+                        )}
+                      </div>
+                      <h4 className="font-black text-slate-900 text-base truncate max-w-full">{rankingData[0].student.name}</h4>
+                      <p className="text-xs font-bold text-amber-800">{rankingData[0].student.kelas || 'Siswa'}</p>
+                      <div className="mt-2 text-sm font-black text-amber-900 bg-amber-200/90 px-4 py-1.5 rounded-2xl border border-amber-300">
+                        Skor Tertinggi: {rankingData[0].finalScore} / 100
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Juara 3 (Perunggu) */}
+                  {rankingData[2] && (
+                    <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-50/60 via-orange-50/30 to-white border-2 border-amber-600/40 shadow-xs flex flex-col items-center text-center relative order-3">
+                      <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-amber-700 text-white font-black text-xs shadow-xs">
+                        🥉 JUARA 3
+                      </span>
+                      <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-600/50 shadow-xs mt-2 mb-2">
+                        {rankingData[2].student.photo_url ? (
+                          <img src={rankingData[2].student.photo_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-amber-700/20 text-amber-900 font-black flex items-center justify-center">
+                            {getInitials(rankingData[2].student.name)}
+                          </div>
+                        )}
+                      </div>
+                      <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-full">{rankingData[2].student.name}</h4>
+                      <p className="text-[11px] text-slate-500">{rankingData[2].student.kelas || 'Siswa'}</p>
+                      <div className="mt-2 text-xs font-black text-amber-800 bg-amber-100/80 px-3 py-1 rounded-xl">
+                        Skor: {rankingData[2].finalScore} / 100
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Grafik Top 10 Siswa */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
+                  <h4 className="text-xs font-extrabold text-slate-900">
+                    📊 Grafik Perbandingan Skor Karakter Top 10 Siswa
+                  </h4>
+                  <div className="h-56 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={rankingData.slice(0, 10).map((r) => ({ name: r.student.name.split(' ')[0], skor: r.finalScore, realisasi: r.realizedCount }))}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 'bold' }} stroke="#64748B" />
+                        <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="#64748B" />
+                        <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                        <Bar dataKey="skor" name="Skor Karakter" fill="#F59E0B" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Tabel Peringkat Lengkap Karakter */}
+                <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                  <div className="max-h-80 overflow-y-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 font-extrabold sticky top-0">
+                        <tr>
+                          <th className="px-3.5 py-2.5 text-center">Rank</th>
+                          <th className="px-3.5 py-2.5">Siswa</th>
+                          <th className="px-3.5 py-2.5">Kelas</th>
+                          <th className="px-3.5 py-2.5 text-center">7 KAIH</th>
+                          <th className="px-3.5 py-2.5 text-center">Guru ⭐</th>
+                          <th className="px-3.5 py-2.5 text-center">Presensi</th>
+                          <th className="px-3.5 py-2.5 text-center">Skor Akhir</th>
+                          <th className="px-3.5 py-2.5 text-center">Predikat</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium">
+                        {rankingData.map((item, idx) => (
+                          <tr key={item.student.id} className="hover:bg-amber-50/40 transition-colors">
+                            <td className="px-3.5 py-2.5 text-center font-black">
+                              {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`}
+                            </td>
+                            <td className="px-3.5 py-2.5">
+                              <div className="flex items-center gap-2">
+                                {item.student.photo_url ? (
+                                  <img src={item.student.photo_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px] flex items-center justify-center">
+                                    {getInitials(item.student.name)}
+                                  </div>
+                                )}
+                                <div>
+                                  <span className="font-bold text-slate-900 block">{item.student.name}</span>
+                                  <span className="text-[10px] text-slate-400">NISN: {item.student.nisn || '-'}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3.5 py-2.5 text-slate-700">{item.student.kelas || '-'}</td>
+                            <td className="px-3.5 py-2.5 text-center font-bold text-emerald-700">
+                              {item.realizedCount} / 7
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center font-bold text-amber-700">
+                              ⭐ {item.avgRating}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center">
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700">
+                                {item.attendanceStatus}
+                              </span>
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center">
+                              <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-amber-100 text-amber-900 border border-amber-200">
+                                {item.finalScore}
+                              </span>
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                {item.predicate}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* ================= VIEW 2: RANKING KEDISIPLINAN WAKTU SISWA ================= */}
+            {rankingReportTab === 'discipline' && (
+              <div className="space-y-5">
+                {/* Banner Penjelasan Analisa Kedisiplinan */}
+                <div className="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-3.5 text-xs text-emerald-950 flex items-start gap-2.5">
+                  <span className="text-xl">⏱️</span>
+                  <div>
+                    <h5 className="font-extrabold">Formula Analisis Kedisiplinan Siswa</h5>
+                    <p className="text-[11px] text-emerald-800 mt-0.5">
+                      Dihitung dari <b>Ketepatan Jam Kegiatan 7 KAIH (60%)</b> [berdasarkan selisih menit antara jam rencana dan jam realisasi] + <b>Presensi Harian Sekolah (40%)</b>.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Podium 3 Besar Siswa Terdisiplin */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                  {/* Juara 2 Kedisiplinan */}
+                  {disciplineRankingData[1] && (
+                    <div className="p-4 rounded-2xl bg-gradient-to-b from-teal-50 via-slate-50 to-white border-2 border-teal-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1">
+                      <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-teal-600 text-white font-black text-xs shadow-xs">
+                        🥈 JUARA 2 DISIPLIN
+                      </span>
+                      <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-teal-300 shadow-xs mt-2 mb-2">
+                        {disciplineRankingData[1].student.photo_url ? (
+                          <img src={disciplineRankingData[1].student.photo_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-teal-100 text-teal-800 font-black flex items-center justify-center">
+                            {getInitials(disciplineRankingData[1].student.name)}
+                          </div>
+                        )}
+                      </div>
+                      <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-full">{disciplineRankingData[1].student.name}</h4>
+                      <p className="text-[11px] text-slate-500">{disciplineRankingData[1].student.kelas || 'Siswa'}</p>
+                      <div className="mt-2 text-xs font-black text-teal-900 bg-teal-100/90 px-3 py-1 rounded-xl">
+                        Skor Disiplin: {disciplineRankingData[1].finalScore} / 100
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Juara 1 Kedisiplinan */}
+                  {disciplineRankingData[0] && (
+                    <div className="p-5 rounded-2xl bg-gradient-to-b from-emerald-100 via-emerald-50 to-white border-2 border-emerald-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105">
+                      <span className="absolute -top-3.5 px-3.5 py-1 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs shadow-xs">
+                        🥇 TELADAN UTAMA DISIPLIN
+                      </span>
+                      <div className="w-20 h-20 rounded-full overflow-hidden border-3 border-emerald-400 shadow-md mt-2 mb-2 ring-4 ring-emerald-200">
+                        {disciplineRankingData[0].student.photo_url ? (
+                          <img src={disciplineRankingData[0].student.photo_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-emerald-500 text-white font-black text-xl flex items-center justify-center">
+                            {getInitials(disciplineRankingData[0].student.name)}
+                          </div>
+                        )}
+                      </div>
+                      <h4 className="font-black text-slate-900 text-base truncate max-w-full">{disciplineRankingData[0].student.name}</h4>
+                      <p className="text-xs font-bold text-emerald-800">{disciplineRankingData[0].student.kelas || 'Siswa'}</p>
+                      <div className="mt-2 text-sm font-black text-emerald-900 bg-emerald-200/90 px-4 py-1.5 rounded-2xl border border-emerald-300">
+                        Skor Disiplin: {disciplineRankingData[0].finalScore} / 100
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Juara 3 Kedisiplinan */}
+                  {disciplineRankingData[2] && (
+                    <div className="p-4 rounded-2xl bg-gradient-to-b from-cyan-50/70 via-slate-50 to-white border-2 border-cyan-400 shadow-xs flex flex-col items-center text-center relative order-3">
+                      <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-cyan-700 text-white font-black text-xs shadow-xs">
+                        🥉 JUARA 3 DISIPLIN
+                      </span>
+                      <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-cyan-400 shadow-xs mt-2 mb-2">
+                        {disciplineRankingData[2].student.photo_url ? (
+                          <img src={disciplineRankingData[2].student.photo_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-cyan-100 text-cyan-800 font-black flex items-center justify-center">
+                            {getInitials(disciplineRankingData[2].student.name)}
+                          </div>
+                        )}
+                      </div>
+                      <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-full">{disciplineRankingData[2].student.name}</h4>
+                      <p className="text-[11px] text-slate-500">{disciplineRankingData[2].student.kelas || 'Siswa'}</p>
+                      <div className="mt-2 text-xs font-black text-cyan-900 bg-cyan-100/90 px-3 py-1 rounded-xl">
+                        Skor Disiplin: {disciplineRankingData[2].finalScore} / 100
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Grafik Top 10 Kedisiplinan */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
+                  <h4 className="text-xs font-extrabold text-slate-900">
+                    ⏱️ Grafik Top 10 Siswa Paling Disiplin Waktu
+                  </h4>
+                  <div className="h-56 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={disciplineRankingData.slice(0, 10).map((r) => ({ name: r.student.name.split(' ')[0], skor: r.finalScore, tepatWaktu: r.onTimeRate }))}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 'bold' }} stroke="#64748B" />
+                        <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="#64748B" />
+                        <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                        <Bar dataKey="skor" name="Skor Kedisiplinan" fill="#10B981" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Tabel Peringkat Kedisiplinan */}
+                <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                  <div className="max-h-80 overflow-y-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-emerald-50/80 border-b border-emerald-200 text-emerald-950 font-extrabold sticky top-0">
+                        <tr>
+                          <th className="px-3.5 py-2.5 text-center">Rank</th>
+                          <th className="px-3.5 py-2.5">Siswa</th>
+                          <th className="px-3.5 py-2.5">Kelas</th>
+                          <th className="px-3.5 py-2.5 text-center">Kegiatan Terjadwal</th>
+                          <th className="px-3.5 py-2.5 text-center">Rata-rata Δt</th>
+                          <th className="px-3.5 py-2.5 text-center">Tepat Waktu</th>
+                          <th className="px-3.5 py-2.5 text-center">Presensi</th>
+                          <th className="px-3.5 py-2.5 text-center">Skor Disiplin</th>
+                          <th className="px-3.5 py-2.5 text-center">Predikat</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium">
+                        {disciplineRankingData.map((item, idx) => (
+                          <tr key={item.student.id} className="hover:bg-emerald-50/30 transition-colors">
+                            <td className="px-3.5 py-2.5 text-center font-black">
+                              {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`}
+                            </td>
+                            <td className="px-3.5 py-2.5">
+                              <div className="flex items-center gap-2">
+                                {item.student.photo_url ? (
+                                  <img src={item.student.photo_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] flex items-center justify-center">
+                                    {getInitials(item.student.name)}
+                                  </div>
+                                )}
+                                <div>
+                                  <span className="font-bold text-slate-900 block">{item.student.name}</span>
+                                  <span className="text-[10px] text-slate-400">NISN: {item.student.nisn || '-'}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3.5 py-2.5 text-slate-700">{item.student.kelas || '-'}</td>
+                            <td className="px-3.5 py-2.5 text-center font-bold text-slate-700">
+                              {item.timedActsCount} kegiatan
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center font-bold" style={{ color: item.avgLateMins <= 15 ? '#047857' : '#b45309' }}>
+                              {item.avgLateMins} mnt
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center font-bold text-blue-700">
+                              {item.onTimeRate}%
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center">
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700">
+                                {item.attendanceStatus}
+                              </span>
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center">
+                              <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-emerald-100 text-emerald-900 border border-emerald-200">
+                                {item.finalScore}
+                              </span>
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                {item.predicate}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ================= VIEW 3: RANKING PRESTASI KUIS EDUKASI ================= */}
+            {rankingReportTab === 'quiz' && (
+              <div className="space-y-5">
+                {/* Banner Penjelasan Prestasi Kuis */}
+                <div className="bg-indigo-50/80 border border-indigo-200 rounded-2xl p-3.5 text-xs text-indigo-950 flex items-start gap-2.5">
+                  <span className="text-xl">🎮</span>
+                  <div>
+                    <h5 className="font-extrabold">Formula Prestasi KAIH Quiz Arena</h5>
+                    <p className="text-[11px] text-indigo-800 mt-0.5">
+                      Peringkat diurutkan berdasarkan <b>Total Akumulasi Poin Kuis Live</b> yang dikerjakan siswa, didukung persentase akurasi jawaban dan keaktifan mengikuti sesi kuis.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Podium 3 Besar Juara Kuis */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                  {/* Juara 2 Kuis */}
+                  {quizRankingData[1] && (
+                    <div className="p-4 rounded-2xl bg-gradient-to-b from-indigo-50 via-slate-50 to-white border-2 border-indigo-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1">
+                      <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-indigo-500 text-white font-black text-xs shadow-xs">
+                        🥈 JUARA 2 KUIS
+                      </span>
+                      <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-indigo-300 shadow-xs mt-2 mb-2">
+                        {quizRankingData[1].student.photo_url ? (
+                          <img src={quizRankingData[1].student.photo_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-indigo-100 text-indigo-800 font-black flex items-center justify-center">
+                            {getInitials(quizRankingData[1].student.name)}
+                          </div>
+                        )}
+                      </div>
+                      <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-full">{quizRankingData[1].student.name}</h4>
+                      <p className="text-[11px] text-slate-500">{quizRankingData[1].student.kelas || 'Siswa'}</p>
+                      <div className="mt-2 text-xs font-black text-indigo-900 bg-indigo-100/90 px-3 py-1 rounded-xl">
+                        {quizRankingData[1].totalScore.toLocaleString('id-ID')} Poin
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Juara 1 Kuis */}
+                  {quizRankingData[0] && (
+                    <div className="p-5 rounded-2xl bg-gradient-to-b from-purple-100 via-indigo-50 to-white border-2 border-indigo-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105">
+                      <span className="absolute -top-3.5 px-3.5 py-1 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black text-xs shadow-xs">
+                        🥇 JUARA UTAMA KUIS
+                      </span>
+                      <div className="w-20 h-20 rounded-full overflow-hidden border-3 border-indigo-400 shadow-md mt-2 mb-2 ring-4 ring-indigo-200">
+                        {quizRankingData[0].student.photo_url ? (
+                          <img src={quizRankingData[0].student.photo_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-indigo-600 text-white font-black text-xl flex items-center justify-center">
+                            {getInitials(quizRankingData[0].student.name)}
+                          </div>
+                        )}
+                      </div>
+                      <h4 className="font-black text-slate-900 text-base truncate max-w-full">{quizRankingData[0].student.name}</h4>
+                      <p className="text-xs font-bold text-indigo-800">{quizRankingData[0].student.kelas || 'Siswa'}</p>
+                      <div className="mt-2 text-sm font-black text-indigo-950 bg-indigo-200/90 px-4 py-1.5 rounded-2xl border border-indigo-300">
+                        {quizRankingData[0].totalScore.toLocaleString('id-ID')} Total Poin
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Juara 3 Kuis */}
+                  {quizRankingData[2] && (
+                    <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-100 via-indigo-50/20 to-white border-2 border-indigo-200 shadow-xs flex flex-col items-center text-center relative order-3">
+                      <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-slate-600 text-white font-black text-xs shadow-xs">
+                        🥉 JUARA 3 KUIS
+                      </span>
+                      <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-indigo-200 shadow-xs mt-2 mb-2">
+                        {quizRankingData[2].student.photo_url ? (
+                          <img src={quizRankingData[2].student.photo_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-slate-200 text-slate-800 font-black flex items-center justify-center">
+                            {getInitials(quizRankingData[2].student.name)}
+                          </div>
+                        )}
+                      </div>
+                      <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-full">{quizRankingData[2].student.name}</h4>
+                      <p className="text-[11px] text-slate-500">{quizRankingData[2].student.kelas || 'Siswa'}</p>
+                      <div className="mt-2 text-xs font-black text-indigo-900 bg-indigo-100/90 px-3 py-1 rounded-xl">
+                        {quizRankingData[2].totalScore.toLocaleString('id-ID')} Poin
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Grafik Top 10 Poin Kuis */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
+                  <h4 className="text-xs font-extrabold text-slate-900">
+                    🎮 Grafik Top 10 Perolehan Poin Kuis Edukasi Siswa
+                  </h4>
+                  <div className="h-56 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={quizRankingData.slice(0, 10).map((r) => ({ name: r.student.name.split(' ')[0], poin: r.totalScore, akurasi: r.accuracy }))}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 'bold' }} stroke="#64748B" />
+                        <YAxis tick={{ fontSize: 10 }} stroke="#64748B" />
+                        <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                        <Bar dataKey="poin" name="Total Poin Kuis" fill="#6366F1" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Tabel Peringkat Kuis Lengkap */}
+                <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                  <div className="max-h-80 overflow-y-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-indigo-50/80 border-b border-indigo-200 text-indigo-950 font-extrabold sticky top-0">
+                        <tr>
+                          <th className="px-3.5 py-2.5 text-center">Rank</th>
+                          <th className="px-3.5 py-2.5">Siswa</th>
+                          <th className="px-3.5 py-2.5">Kelas</th>
+                          <th className="px-3.5 py-2.5 text-center">Total Poin</th>
+                          <th className="px-3.5 py-2.5 text-center">Kuis Diikuti</th>
+                          <th className="px-3.5 py-2.5 text-center">Benar / Soal</th>
+                          <th className="px-3.5 py-2.5 text-center">Akurasi</th>
+                          <th className="px-3.5 py-2.5 text-center">Best Score</th>
+                          <th className="px-3.5 py-2.5 text-center">Predikat</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium">
+                        {quizRankingData.map((item, idx) => (
+                          <tr key={item.student.id} className="hover:bg-indigo-50/30 transition-colors">
+                            <td className="px-3.5 py-2.5 text-center font-black">
+                              {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`}
+                            </td>
+                            <td className="px-3.5 py-2.5">
+                              <div className="flex items-center gap-2">
+                                {item.student.photo_url ? (
+                                  <img src={item.student.photo_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-800 font-bold text-[10px] flex items-center justify-center">
+                                    {getInitials(item.student.name)}
+                                  </div>
+                                )}
+                                <div>
+                                  <span className="font-bold text-slate-900 block">{item.student.name}</span>
+                                  <span className="text-[10px] text-slate-400">NISN: {item.student.nisn || '-'}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3.5 py-2.5 text-slate-700">{item.student.kelas || '-'}</td>
+                            <td className="px-3.5 py-2.5 text-center font-black text-indigo-700 text-xs">
+                              {item.totalScore.toLocaleString('id-ID')}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center font-bold text-slate-700">
+                              {item.quizCount} Kuis
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center font-bold text-emerald-700">
+                              {item.correctCount} / {item.totalQuestions}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center font-bold text-blue-700">
+                              {item.accuracy}%
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center font-semibold text-slate-600">
+                              {item.bestScore}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-center">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                {item.predicate}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
