@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { View, Animated, Image, Alert } from 'react-native';
 import { useTheme } from '../../theme/colors';
 import kaihLogoAsset from '../../../assets/kaih_logo.png';
-import { getUserStudentProfile, isProfileComplete } from '../../utils/userCache';
+import { getUserStudentProfile, getCachedUserStudentProfile, isProfileComplete } from '../../utils/userCache';
 
 const GlowingAddButton = React.memo(() => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -111,19 +111,30 @@ const GlowingAddButton = React.memo(() => {
 export default function TabLayout() {
   const { colors } = useTheme();
 
-  // Helper check tab access
-  const checkTabAccess = async (e: any) => {
+  // Helper check tab access (sinkron untuk e.preventDefault() agar tab tidak berpindah jika belum 100%)
+  const checkTabAccess = (e: any) => {
     try {
-      const userProfile = await getUserStudentProfile();
-      const complete = isProfileComplete(userProfile);
-
-      if (!complete) {
+      const cached = getCachedUserStudentProfile();
+      if (cached && !isProfileComplete(cached)) {
         e.preventDefault();
         Alert.alert(
           '⚠️ Profil Belum Lengkap',
-          'Silakan lengkapi seluruh data identitas & akademik di menu Akun terlebih dahulu sebelum membuka fitur ini.'
+          'Silakan lengkapi seluruh data wajib di halaman Profil sampai 100% terlebih dahulu sebelum membuka menu lain.'
         );
         router.replace('/(tabs)/profile');
+        return;
+      }
+
+      if (!cached) {
+        getUserStudentProfile().then((userProfile) => {
+          if (!isProfileComplete(userProfile)) {
+            Alert.alert(
+              '⚠️ Profil Belum Lengkap',
+              'Silakan lengkapi seluruh data wajib di halaman Profil sampai 100% terlebih dahulu sebelum membuka menu lain.'
+            );
+            router.replace('/(tabs)/profile');
+          }
+        });
       }
     } catch (err) {
       console.log('Tab check error:', err);
@@ -188,13 +199,14 @@ export default function TabLayout() {
         listeners={({ navigation }) => ({
           tabPress: async (e) => {
             e.preventDefault();
-            const userProfile = await getUserStudentProfile();
+            const cached = getCachedUserStudentProfile();
+            const userProfile = (cached && isProfileComplete(cached)) ? cached : await getUserStudentProfile(true);
             const complete = isProfileComplete(userProfile);
 
             if (!complete) {
               Alert.alert(
                 '⚠️ Profil Belum Lengkap',
-                'Silakan lengkapi seluruh data identitas & akademik di menu Akun terlebih dahulu sebelum menginput aktivitas.'
+                'Silakan lengkapi seluruh data wajib di halaman Profil sampai 100% terlebih dahulu sebelum menginput aktivitas.'
               );
               router.replace('/(tabs)/profile');
             } else {

@@ -9,8 +9,38 @@ export interface UserCacheData {
 let cachedData: UserCacheData | null = null;
 let fetchPromise: Promise<UserCacheData | null> | null = null;
 
+export function getCachedUserStudentProfile(): UserCacheData | null {
+  return cachedData;
+}
+
+/**
+ * Sinkronkan cache langsung dari state profileData di halaman Profil
+ * agar pengecekan kelengkapan profil di TabLayout & Dashboard selalu instan & akurat.
+ */
+export function syncUserCacheFromProfileData(profileData: any) {
+  if (!profileData) return;
+  const rawStudent = profileData.students;
+  const student = (Array.isArray(rawStudent) ? rawStudent[0] : rawStudent) || cachedData?.student || null;
+  cachedData = {
+    user: cachedData?.user || { id: profileData.user_id || profileData.id },
+    profile: {
+      id: profileData.id,
+      full_name: profileData.full_name,
+      photo_url: profileData.photo_url,
+      phone: profileData.phone,
+      address: profileData.address,
+      latitude: profileData.latitude,
+      longitude: profileData.longitude,
+      gender: profileData.gender,
+      religion: profileData.religion,
+      birth_date: profileData.birth_date,
+    },
+    student,
+  };
+}
+
 export async function getUserStudentProfile(forceRefresh = false): Promise<UserCacheData | null> {
-  if (cachedData && cachedData.student && !forceRefresh) {
+  if (cachedData && cachedData.student && isProfileComplete(cachedData) && !forceRefresh) {
     return cachedData;
   }
 
@@ -67,21 +97,26 @@ export function isProfileComplete(userCacheData: UserCacheData | null): boolean 
     return false;
   }
   const p = userCacheData.profile;
-  const s = userCacheData.student;
+  const rawS = userCacheData.student;
+  const s = Array.isArray(rawS) ? rawS[0] : rawS;
 
-  const hasName = Boolean(p.full_name && p.full_name.trim());
-  const hasPhone = Boolean(p.phone && p.phone.trim());
-  const hasAddress = Boolean(p.address && p.address.trim());
+  const hasName = Boolean(p.full_name && String(p.full_name).trim());
+  const hasPhone = Boolean(p.phone && String(p.phone).trim());
+  const hasAddress = Boolean(p.address && String(p.address).trim());
 
   if (!hasName || !hasPhone || !hasAddress) return false;
   if (!s) return false;
 
-  const hasNisnOrNis = Boolean((s.nisn && s.nisn.trim()) || (s.nis && s.nis.trim()));
-  const hasEduLevel = Boolean(s.education_level && s.education_level.trim());
+  const hasNisnOrNis = Boolean((s.nisn && String(s.nisn).trim()) || (s.nis && String(s.nis).trim()));
 
   let notesObj: any = {};
-  try { if (s.notes) notesObj = JSON.parse(s.notes); } catch (e) {}
-  const hasKelas = Boolean(notesObj.kelas && notesObj.kelas.trim());
+  try { if (s.notes) notesObj = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes; } catch (e) {}
+
+  const hasEduLevel = Boolean(
+    (s.education_level && String(s.education_level).trim()) ||
+    (notesObj.jenjang && String(notesObj.jenjang).trim())
+  );
+  const hasKelas = Boolean(notesObj.kelas && String(notesObj.kelas).trim());
 
   if (!hasNisnOrNis || !hasEduLevel || !hasKelas) return false;
 

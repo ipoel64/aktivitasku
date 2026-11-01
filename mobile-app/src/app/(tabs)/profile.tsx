@@ -13,7 +13,7 @@ import { WebView } from 'react-native-webview';
 import { decode } from 'base64-arraybuffer';
 import { useTheme } from '../../theme/colors';
 import { KaihLoadingScreen } from '../../components/KaihLoadingLogo';
-import { clearUserCache } from '../../utils/userCache';
+import { clearUserCache, syncUserCacheFromProfileData, getUserStudentProfile } from '../../utils/userCache';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -190,6 +190,31 @@ interface EditField {
   keyboardType?: 'default' | 'phone-pad' | 'numeric';
 }
 
+// ─── Helper Cek Kelengkapan Biodata (0 - 100%) ──────────
+function getProfileCompleteness(data: any) {
+  if (!data) return { isComplete: false, percent: 0, missing: [] as string[] };
+  const p = data;
+  const rawS = data.students;
+  const s = (Array.isArray(rawS) ? rawS[0] : rawS) || {};
+  let n: any = {};
+  try { if (s.notes) n = typeof s.notes === 'string' ? JSON.parse(s.notes) : s.notes; } catch (e) {}
+
+  const fields = [
+    { name: 'Nama Lengkap', isFilled: Boolean(p.full_name && String(p.full_name).trim()) },
+    { name: 'No. Telepon', isFilled: Boolean(p.phone && String(p.phone).trim()) },
+    { name: 'Alamat Lengkap', isFilled: Boolean(p.address && String(p.address).trim()) },
+    { name: 'NISN / NIS', isFilled: Boolean((s.nisn && String(s.nisn).trim()) || (s.nis && String(s.nis).trim())) },
+    { name: 'Jenjang Pendidikan', isFilled: Boolean((s.education_level && String(s.education_level).trim()) || (n.jenjang && String(n.jenjang).trim())) },
+    { name: 'Kelas', isFilled: Boolean(n.kelas && String(n.kelas).trim()) },
+  ];
+
+  const filledCount = fields.filter(f => f.isFilled).length;
+  const percent = Math.round((filledCount / fields.length) * 100);
+  const missing = fields.filter(f => !f.isFilled).map(f => f.name);
+  const isComplete = percent === 100;
+  return { isComplete, percent, missing };
+}
+
 // ═════════════════════════════════════════════════════════
 // ─── MAIN PROFILE SCREEN ────────────────────────────────
 // ═════════════════════════════════════════════════════════
@@ -201,6 +226,30 @@ export default function ProfileScreen() {
   const [uploading, setUploading] = useState(false);
   const [uploadingHousePhoto, setUploadingHousePhoto] = useState(false);
   const [profileData, setProfileData] = useState<any>(null);
+  const wasIncompleteRef = useRef(false);
+
+  // Helper sinkronisasi state, cache global, & auto-redirect ke Dashboard saat baru mencapai 100%
+  const applyProfileDataUpdate = useCallback((nextData: any, prevData: any, successTitle: string, successMsg: string) => {
+    const wasIncomplete = !getProfileCompleteness(prevData).isComplete || wasIncompleteRef.current;
+    const nextComp = getProfileCompleteness(nextData);
+
+    setProfileData(nextData);
+    syncUserCacheFromProfileData(nextData);
+    getUserStudentProfile(true).catch(() => {});
+
+    if (wasIncomplete && nextComp.isComplete) {
+      wasIncompleteRef.current = false;
+      // Biodata baru saja lengkap 100% (Hijau) -> otomatis arahkan ke halaman Dashboard!
+      setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 450);
+    } else if (!nextComp.isComplete) {
+      // Selama belum 100%, user tetap berada di halaman profil untuk melengkapi sisa kolom wajib
+      wasIncompleteRef.current = true;
+    } else {
+      Alert.alert(successTitle, successMsg);
+    }
+  }, []);
   
   // Standard Edit State
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -237,10 +286,8 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!hasLoadedOnce) {
-        fetchProfile();
-      }
-    }, [hasLoadedOnce])
+      fetchProfile();
+    }, [])
   );
 
   async function fetchProfile() {
@@ -285,7 +332,14 @@ export default function ProfileScreen() {
         .single();
 
       if (error) throw error;
-      setProfileData(data);
+      const normalizedStudents = (Array.isArray(data?.students) ? data.students[0] : data?.students) || {};
+      const normalizedData = { ...data, students: normalizedStudents };
+      const comp = getProfileCompleteness(normalizedData);
+      if (!comp.isComplete) {
+        wasIncompleteRef.current = true;
+      }
+      setProfileData(normalizedData);
+      syncUserCacheFromProfileData(normalizedData);
 
       Animated.parallel([
         Animated.timing(headerOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
@@ -344,7 +398,9 @@ export default function ProfileScreen() {
 
       if (updateError) throw updateError;
 
-      setProfileData({ ...profileData, photo_url: publicUrl });
+      const nextData = { ...profileData, photo_url: publicUrl };
+      setProfileData(nextData);
+      syncUserCacheFromProfileData(nextData);
       Alert.alert('Sukses', 'Foto profil berhasil diperbarui!');
     } catch (error: any) {
       Alert.alert('Gagal Mengunggah', error.message || 'Terjadi kesalahan saat mengunggah foto.');
@@ -465,12 +521,11 @@ export default function ProfileScreen() {
       const notesStr = JSON.stringify(notesObj);
 
       const updatedStudent = await saveStudentData({ notes: notesStr });
-
-      setProfileData({
+      const nextData = {
         ...profileData,
         students: { ...studentData, ...updatedStudent, notes: notesStr },
-      });
-      Alert.alert('Sukses ✓', 'Foto rumah berhasil diunggah!');
+      };
+      applyProfileDataUpdate(nextData, profileData, 'Sukses ✓', 'Foto rumah berhasil diunggah!');
     } catch (error: any) {
       Alert.alert('Gagal Mengunggah', error.message || 'Terjadi kesalahan saat mengunggah foto rumah.');
     } finally {
@@ -503,9 +558,9 @@ export default function ProfileScreen() {
 
       if (error) throw error;
 
-      setProfileData({ ...profileData, birth_date: formattedDate });
+      const nextData = { ...profileData, birth_date: formattedDate };
       setDatePickerVisible(false);
-      Alert.alert('Berhasil ✓', 'Tanggal lahir berhasil diperbarui.');
+      applyProfileDataUpdate(nextData, profileData, 'Berhasil ✓', 'Tanggal lahir berhasil diperbarui.');
     } catch (err: any) {
       Alert.alert('Gagal Menyimpan', err.message || 'Terjadi kesalahan.');
     } finally {
@@ -550,6 +605,7 @@ export default function ProfileScreen() {
       if (!user) throw new Error('Anda belum login');
 
       const studentData = profileData.students || {};
+      let nextData = profileData;
 
       if (editField.table === 'user_profiles') {
         let dbValue = finalValue.trim();
@@ -563,7 +619,7 @@ export default function ProfileScreen() {
           .update({ [editField.key]: dbValue })
           .eq('id', profileData.id);
         if (error) throw error;
-        setProfileData({ ...profileData, [editField.key]: dbValue });
+        nextData = { ...profileData, [editField.key]: dbValue };
         
       } else if (editField.table === 'students') {
         if (editField.key === 'education_level') {
@@ -578,16 +634,16 @@ export default function ProfileScreen() {
           
           const updatedStudent = await saveStudentData({ education_level: dbEnum, notes: notesStr });
           
-          setProfileData({
+          nextData = {
             ...profileData,
             students: { ...studentData, ...updatedStudent, education_level: dbEnum, notes: notesStr },
-          });
+          };
         } else {
           const updatedStudent = await saveStudentData({ [editField.key]: finalValue.trim() });
-          setProfileData({
+          nextData = {
             ...profileData,
             students: { ...studentData, ...updatedStudent, [editField.key]: finalValue.trim() },
-          });
+          };
         }
         
       } else if (editField.table === 'notes') {
@@ -603,14 +659,14 @@ export default function ProfileScreen() {
 
         const updatedStudent = await saveStudentData({ notes: notesStr });
 
-        setProfileData({
+        nextData = {
           ...profileData,
           students: { ...studentData, ...updatedStudent, notes: notesStr },
-        });
+        };
       }
 
       setEditModalVisible(false);
-      Alert.alert('Berhasil ✓', `${editField.label} berhasil diperbarui.`);
+      applyProfileDataUpdate(nextData, profileData, 'Berhasil ✓', `${editField.label} berhasil diperbarui.`);
     } catch (error: any) {
       Alert.alert('Gagal Menyimpan', error.message || 'Terjadi kesalahan.');
     } finally {
@@ -729,15 +785,15 @@ export default function ProfileScreen() {
 
       if (error) throw error;
 
-      setProfileData({
+      const nextData = {
         ...profileData,
         address: selectedAddressText.trim(),
         latitude: mapCoord.latitude,
         longitude: mapCoord.longitude,
-      });
+      };
 
       setMapModalVisible(false);
-      Alert.alert('Berhasil ✓', 'Alamat dan titik koordinat lokasi berhasil diperbarui.');
+      applyProfileDataUpdate(nextData, profileData, 'Berhasil ✓', 'Alamat dan titik koordinat lokasi berhasil diperbarui.');
     } catch (error: any) {
       Alert.alert('Gagal Menyimpan', error.message || 'Terjadi kesalahan.');
     } finally {
@@ -917,28 +973,7 @@ export default function ProfileScreen() {
 
           {/* ─── BANNER KELENGKAPAN PROFIL (ONBOARDING REMINDER) ─── */}
           {(() => {
-            const { isComplete: isComp, percent: pct, missing: mList } = (() => {
-              if (!profileData) return { isComplete: false, percent: 0, missing: [] };
-              const p = profileData;
-              const s = profileData.students || {};
-              let n: any = {};
-              try { if (s.notes) n = JSON.parse(s.notes); } catch (e) {}
-
-              const fields = [
-                { name: 'Nama Lengkap', isFilled: Boolean(p.full_name?.trim()) },
-                { name: 'No. Telepon', isFilled: Boolean(p.phone?.trim()) },
-                { name: 'Alamat Lengkap', isFilled: Boolean(p.address?.trim()) },
-                { name: 'NISN / NIS', isFilled: Boolean(s.nisn?.trim() || s.nis?.trim()) },
-                { name: 'Jenjang Pendidikan', isFilled: Boolean(s.education_level?.trim()) },
-                { name: 'Kelas', isFilled: Boolean(n.kelas?.trim()) },
-              ];
-
-              const filledCount = fields.filter(f => f.isFilled).length;
-              const percent = Math.round((filledCount / fields.length) * 100);
-              const missing = fields.filter(f => !f.isFilled).map(f => f.name);
-              const isComplete = percent === 100;
-              return { isComplete, percent, missing };
-            })();
+            const { isComplete: isComp, percent: pct, missing: mList } = getProfileCompleteness(profileData);
 
             if (!isComp) {
               return (
@@ -950,7 +985,7 @@ export default function ProfileScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.incompleteBannerTitle}>Status Profil: Belum Lengkap ({pct}%)</Text>
                       <Text style={styles.incompleteBannerSub}>
-                        Wajib melengkapi seluruh data di bawah agar semua fitur aplikasi terbuka.
+                        Wajib melengkapi seluruh data di bawah sampai 100% agar otomatis masuk ke halaman Dashboard.
                       </Text>
                     </View>
                   </View>
@@ -975,13 +1010,21 @@ export default function ProfileScreen() {
             }
 
             return (
-              <View style={styles.completeBannerCard}>
-                <Ionicons name="checkmark-circle" size={22} color="#16a34a" />
+              <TouchableOpacity
+                style={styles.completeBannerCard}
+                activeOpacity={0.85}
+                onPress={() => router.replace('/(tabs)')}
+              >
+                <Ionicons name="checkmark-circle" size={24} color="#16a34a" />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.completeBannerTitle}>Biodata Lengkap 100% ✓</Text>
                   <Text style={styles.completeBannerSub}>Seluruh fitur jurnal & laporan 7 KAIH telah aktif sepenuhnya.</Text>
                 </View>
-              </View>
+                <View style={{ backgroundColor: '#16a34a', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Text style={{ color: '#fff', fontSize: 11.5, fontWeight: '800' }}>Dashboard</Text>
+                  <Ionicons name="arrow-forward" size={13} color="#fff" />
+                </View>
+              </TouchableOpacity>
             );
           })()}
 

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { supabase } from '../utils/supabase';
-import { getUserStudentProfile } from '../utils/userCache';
+import { getUserStudentProfile, getCachedUserStudentProfile } from '../utils/userCache';
 
 interface Question { q: string; options: string[]; answer: number; explanation?: string }
 interface Quiz {
@@ -88,11 +88,16 @@ export default function LiveCenter() {
 
   // ---- kuis live
   const checkQuizzes = useCallback(async () => {
+    const cached = getCachedUserStudentProfile();
+    let currentKelas = student?.kelas || '';
+    if (cached?.student?.notes) {
+      try { currentKelas = JSON.parse(cached.student.notes || '{}').kelas || currentKelas; } catch {}
+    }
     if (!student) return;
     const { data } = await supabase.from('quizzes').select('*').eq('status', 'LIVE');
     if (!data) return;
     for (const q of data as Quiz[]) {
-      if (q.target_class !== 'SEMUA' && q.target_class !== student.kelas) continue;
+      if (q.target_class !== 'SEMUA' && q.target_class !== currentKelas) continue;
       if (seenQuiz.current.has(q.id)) continue;
       const { data: done } = await supabase.from('quiz_submissions').select('id').eq('quiz_id', q.id).eq('student_id', student.id).maybeSingle();
       if (done) { seenQuiz.current.add(q.id); continue; }
