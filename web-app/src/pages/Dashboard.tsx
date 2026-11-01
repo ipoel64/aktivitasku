@@ -6,7 +6,7 @@ import {
   BarChart2, UserCheck, Save, XCircle, HeartPulse, FileText, 
   Sparkles, ZoomIn, RotateCcw, Phone, User, 
   Award, School, Home, Briefcase, GraduationCap, Camera, KeyRound, LayoutDashboard, Settings,
-  Printer, MessageCircle, Gamepad2
+  Printer, MessageCircle, Gamepad2, Copy, ThumbsUp, AlertTriangle, Lightbulb
 } from 'lucide-react';
 import {
   loadSchoolLocationConfig,
@@ -433,6 +433,12 @@ export default function Dashboard() {
   const [rankingReportTab, setRankingReportTab] = useState<'general' | 'discipline' | 'quiz'>('general');
   const [allQuizSubmissions, setAllQuizSubmissions] = useState<any[]>([]);
 
+  // Student Diagnostic & Counseling Analysis Modal
+  const [selectedStudentForAnalysis, setSelectedStudentForAnalysis] = useState<any>(null);
+  const [isStudentAnalysisModalOpen, setIsStudentAnalysisModalOpen] = useState(false);
+  const [customAdviceDraft, setCustomAdviceDraft] = useState('');
+  const [copiedAdvice, setCopiedAdvice] = useState(false);
+
   // Profile Form States
   const [profileForm, setProfileForm] = useState({ fullName: '', photoUrl: '', newPassword: '', confirmPassword: '' });
   const [isProfileSaving, setIsProfileSaving] = useState(false);
@@ -445,7 +451,7 @@ export default function Dashboard() {
 
   // Data Siswa: pencarian & filter berdasarkan biodata
   const [stuSearch, setStuSearch] = useState('');
-  const [chatTarget, setChatTarget] = useState<{ student: any; locationName?: string } | null>(null);
+  const [chatTarget, setChatTarget] = useState<{ student: any; locationName?: string; initialText?: string } | null>(null);
   const [demoExtraTab, setDemoExtraTab] = useState<'suku' | 'blood_type' | 'parentOccupation'>('suku');
   const EMPTY_STU_FILTERS = { jenjang: 'Semua', kelas: 'Semua', jurusan: 'Semua', gender: 'Semua', religion: 'Semua', suku: 'Semua', status: 'Semua', talents: 'Semua', interests: 'Semua', hobbies: 'Semua', extracurriculars: 'Semua', aspiration: 'Semua', blood_type: 'Semua', parentOccupation: 'Semua' };
   const [stuFilters, setStuFilters] = useState({ ...EMPTY_STU_FILTERS });
@@ -1920,35 +1926,303 @@ export default function Dashboard() {
     setIsStudentPopupOpen(true);
   };
 
-  const openStudentActivitiesFromRanking = (student: any) => {
+
+  const openStudentAnalysisModal = (student: any) => {
     if (!student) return;
-    const existingCard = studentActivityCards.find(c => c.student.id === student.id);
-    if (existingCard) {
-      setSelectedStudentForPopup(existingCard);
-      setPopupFilterStatus('Semua');
-      setIsStudentPopupOpen(true);
-      return;
+    setSelectedStudentForAnalysis(student);
+    setCopiedAdvice(false);
+    setIsStudentAnalysisModalOpen(true);
+  };
+
+  const studentAnalysisDetails = useMemo(() => {
+    if (!selectedStudentForAnalysis) return null;
+    const sId = selectedStudentForAnalysis.id;
+    const sActs = allActivitiesRaw.filter((a) => (a.students?.id || a.student_id) === sId);
+
+    const habits = KAIH_CATEGORIES.map((catName) => {
+      const matchActs = sActs.filter((a) => {
+        const c = (a.activity_categories?.name || a.title || '').toLowerCase();
+        if (catName === 'Bangun Pagi') return c.includes('bangun');
+        if (catName === 'Beribadah') return c.includes('ibadah') || c.includes('sholat') || c.includes('doa');
+        if (catName === 'Berolahraga') return c.includes('olahraga') || c.includes('senam') || c.includes('lari');
+        if (catName === 'Makan Sehat dan Bergizi') return c.includes('makan') || c.includes('gizi') || c.includes('sarapan');
+        if (catName === 'Gemar Belajar') return c.includes('belajar') || c.includes('baca') || c.includes('tugas');
+        if (catName === 'Bermasyarakat') return c.includes('masyarakat') || c.includes('sosial') || c.includes('bantu');
+        if (catName === 'Tidur Tepat Waktu') return c.includes('tidur');
+        return false;
+      });
+
+      const realizedActs = matchActs.filter((a) => a.kaihStatus === 'REALISASI');
+      const plannedActs = matchActs.filter((a) => a.kaihStatus === 'RENCANA');
+      const isCompleted = realizedActs.length > 0;
+
+      let onTimeCount = 0;
+      let lateCount = 0;
+      let totalDelta = 0;
+
+      realizedActs.forEach((a) => {
+        const disc = getDisciplineInfo(a);
+        if (disc.level === 'high') onTimeCount++;
+        else if (disc.level === 'mid' || disc.level === 'low') lateCount++;
+        if (disc.delta !== null && disc.delta > 0) totalDelta += disc.delta;
+      });
+
+      const avgDelta = realizedActs.length > 0 ? Math.round(totalDelta / realizedActs.length) : null;
+      const meaning = getKaihMeaning(catName);
+
+      let status: 'strong' | 'moderate' | 'weak';
+      let statusLabel: string;
+      let badgeCls: string;
+
+      if (isCompleted && (lateCount === 0 || onTimeCount >= lateCount)) {
+        status = 'strong';
+        statusLabel = 'Konsisten & Disiplin (Bagus)';
+        badgeCls = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+      } else if (isCompleted) {
+        status = 'moderate';
+        statusLabel = 'Dikerjakan (Sering Terlambat)';
+        badgeCls = 'bg-amber-100 text-amber-800 border-amber-300';
+      } else {
+        status = 'weak';
+        statusLabel = 'Belum Dikerjakan / Nihil (Lemah)';
+        badgeCls = 'bg-rose-100 text-rose-800 border-rose-300';
+      }
+
+      const latestAct = realizedActs[0] || plannedActs[0] || null;
+
+      return {
+        catName,
+        icon: meaning?.icon || '📌',
+        meaning: meaning?.meaning || '',
+        indicator: meaning?.indicator || '',
+        adviceTip: meaning?.advice,
+        realizedCount: realizedActs.length,
+        plannedCount: plannedActs.length,
+        isCompleted,
+        onTimeCount,
+        lateCount,
+        avgDelta,
+        status,
+        statusLabel,
+        badgeCls,
+        latestAct,
+        matchActs
+      };
+    });
+
+    const strongList = habits.filter(h => h.status === 'strong');
+    const moderateList = habits.filter(h => h.status === 'moderate');
+    const weakList = habits.filter(h => h.status === 'weak');
+
+    const totalRealized = habits.reduce((acc, h) => acc + h.realizedCount, 0);
+    const completedHabitsCount = habits.filter(h => h.isCompleted).length;
+
+    const attRec = attendanceRecords[sId];
+    const attendanceStatus = attRec?.status || 'Belum Diabsen';
+
+    const stuQuizzes = allQuizSubmissions.filter((q) => (q.student_id || q.student?.id) === sId);
+    const quizAvgScore = stuQuizzes.length > 0 
+      ? Math.round(stuQuizzes.reduce((acc, q) => acc + (q.score || 0), 0) / stuQuizzes.length)
+      : null;
+
+    const rankingItem = rankingData.find((r) => r.student.id === sId);
+    const overallScore = rankingItem?.finalScore || Math.min(100, Math.round((completedHabitsCount / 7) * 100));
+    const predicate = rankingItem?.predicate || (overallScore >= 75 ? 'Unggul ⭐' : 'Perlu Bimbingan ⚠️');
+
+    return {
+      habits,
+      strongList,
+      moderateList,
+      weakList,
+      totalRealized,
+      completedHabitsCount,
+      attendanceStatus,
+      quizAvgScore,
+      overallScore,
+      predicate,
+    };
+  }, [selectedStudentForAnalysis, allActivitiesRaw, attendanceRecords, allQuizSubmissions, rankingData]);
+
+  useEffect(() => {
+    if (!studentAnalysisDetails || !selectedStudentForAnalysis) return;
+    const sName = selectedStudentForAnalysis.name || 'Siswa';
+    const strongNames = studentAnalysisDetails.strongList.map(h => `"${h.catName}"`).join(', ');
+    const weakNames = studentAnalysisDetails.weakList.map(h => `"${h.catName}"`).join(', ');
+    const modNames = studentAnalysisDetails.moderateList.map(h => `"${h.catName}"`).join(', ');
+
+    let teksKelebihan = '';
+    if (studentAnalysisDetails.strongList.length > 0) {
+      teksKelebihan = `Alhamdulillah ananda ${sName} menunjukkan karakter sangat baik dan disiplin dalam kebiasaan ${strongNames}. Ketepatan waktu dan komitmen ini patut dibanggakan dan terus dipertahankan.`;
+    } else {
+      teksKelebihan = `Ananda ${sName} memiliki potensi besar untuk mengembangkan pembiasaan karakter 7 KAIH agar lebih disiplin dan berprestasi.`;
     }
 
-    const studentActs = allActivitiesRaw.filter((a) => (a.students?.id || a.student_id) === student.id);
-    const realizedCount = studentActs.filter((a) => a.kaihStatus === 'REALISASI').length;
-    const plannedCount = studentActs.filter((a) => a.kaihStatus === 'RENCANA').length;
-    const evaluatedCount = studentActs.filter((a) => a.kaihStatus === 'REALISASI' && a.evaluations && a.evaluations.length > 0).length;
-    const pendingCount = studentActs.filter((a) => a.kaihStatus === 'REALISASI' && (!a.evaluations || a.evaluations.length === 0)).length;
+    let teksKelemahan = '';
+    if (studentAnalysisDetails.weakList.length > 0) {
+      const tips = studentAnalysisDetails.weakList.slice(0, 3).map(h => {
+        const t = h.adviceTip?.low?.[0] || `biasakan melaksanakan kegiatan ${h.catName} secara rutin setiap hari`;
+        return `• ${h.catName}: ${t}`;
+      }).join('\n');
+      teksKelemahan = `Namun, Bapak/Ibu guru mencatat beberapa kebiasaan penting yang masih BELUM dikerjakan atau belum tercatat, yaitu pada kegiatan ${weakNames}. Yuk mulai perbaiki dari sekarang:\n${tips}`;
+    } else if (studentAnalysisDetails.moderateList.length > 0) {
+      teksKelemahan = `Seluruh kebiasaan sudah dikerjakan, namun pada kegiatan ${modNames} waktu pelaksanaannya masih sering lewat dari rencana. Usahakan lebih tertib dan tepat waktu ya Nak!`;
+    } else {
+      teksKelemahan = `Luar biasa, seluruh 7 kebiasaan KAIH sudah terlaksana dengan sangat konsisten, disiplin, dan tepat waktu! Teruslah menjadi inspirasi dan teladan bagi teman-temanmu.`;
+    }
 
-    const card = {
-      student,
-      activities: studentActs,
-      realizedCount,
-      plannedCount,
-      evaluatedCount,
-      pendingCount,
-      latestDate: '',
-      latestActivity: null
-    };
-    setSelectedStudentForPopup(card);
-    setPopupFilterStatus('Semua');
-    setIsStudentPopupOpen(true);
+    const penutup = `Ingat, sukses dimulai dari kebiasaan kecil yang istiqomah setiap hari. Tetap semangat dan selalu berdoa! 🌟`;
+
+    const fullDraft = `Assalamu'alaikum wr. wb. / Salam hangat Ananda ${sName},\n\n${teksKelebihan}\n\n${teksKelemahan}\n\n${penutup}`;
+    setCustomAdviceDraft(fullDraft);
+  }, [studentAnalysisDetails, selectedStudentForAnalysis]);
+
+  const handlePrintStudentCounseling = () => {
+    if (!selectedStudentForAnalysis || !studentAnalysisDetails) return;
+    const printWindow = window.open('', '_blank', 'width=950,height=1000');
+    if (!printWindow) return;
+
+    const todayStr = new Date().toLocaleDateString('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    const s = selectedStudentForAnalysis;
+    const strongListHtml = studentAnalysisDetails.strongList.length > 0
+      ? studentAnalysisDetails.strongList.map(h => `<li><strong>${h.icon} ${h.catName}</strong>: Dikerjakan rutin & disiplin. <em>(${h.meaning})</em></li>`).join('')
+      : '<li><em>Belum ada kebiasaan yang mencapai predikat konsisten tepat waktu.</em></li>';
+
+    const weakListHtml = studentAnalysisDetails.weakList.length > 0
+      ? studentAnalysisDetails.weakList.map(h => `<li><strong>${h.icon} ${h.catName}</strong>: Belum dikerjakan / nihil. <em>Perlu dorongan untuk: ${h.indicator}</em></li>`).join('')
+      : '<li><em>Luar biasa, seluruh 7 kebiasaan sudah terlaksana!</em></li>';
+
+    const tableRowsHtml = studentAnalysisDetails.habits.map((h, i) => {
+      const act = h.latestAct;
+      const statusText = h.status === 'strong' ? '🟢 Konsisten & Tepat Waktu' : h.status === 'moderate' ? '🟡 Terlaksana (Terlambat)' : '🔴 Belum Dikerjakan / Nihil';
+      const planTime = act?.plannedTime || '-';
+      const realTime = act?.realizedTime || '-';
+      return `
+        <tr>
+          <td style="text-align:center;">${i + 1}</td>
+          <td><strong>${h.icon} ${h.catName}</strong></td>
+          <td><span style="font-weight:bold;">${statusText}</span></td>
+          <td style="text-align:center;">${planTime}</td>
+          <td style="text-align:center;">${realTime}</td>
+          <td>${h.meaning}</td>
+        </tr>
+      `;
+    }).join('');
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Lembar Analisa & Konseling - ${s.name}</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 11pt; color: #1e293b; line-height: 1.5; margin: 0; padding: 10px; }
+    .header { text-align: center; border-bottom: 3px double #0f766e; padding-bottom: 12px; margin-bottom: 18px; }
+    .header h2 { margin: 0; font-size: 17pt; color: #0f766e; text-transform: uppercase; letter-spacing: 0.5px; }
+    .header h3 { margin: 4px 0; font-size: 12pt; color: #334155; font-weight: 600; }
+    .header p { margin: 2px 0; font-size: 9pt; color: #64748b; }
+    .meta-box { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; }
+    .meta-table { width: 100%; border-collapse: collapse; }
+    .meta-table td { padding: 4px 6px; font-size: 10pt; vertical-align: top; }
+    .meta-table td.label { width: 22%; font-weight: bold; color: #475569; }
+    .sec-title { font-size: 11pt; font-weight: bold; color: #0f766e; margin: 16px 0 8px 0; border-left: 4px solid #0f766e; padding-left: 8px; text-transform: uppercase; }
+    table.data-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 9.5pt; }
+    table.data-table th, table.data-table td { border: 1px solid #cbd5e1; padding: 6px 8px; }
+    table.data-table th { background-color: #0f766e; color: white; text-align: left; }
+    .box-grid { display: flex; gap: 14px; margin-bottom: 16px; }
+    .box-item { flex: 1; border-radius: 8px; padding: 12px; font-size: 9.5pt; }
+    .box-green { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+    .box-red { background: #fff1f2; border: 1px solid #fecdd3; color: #9f1239; }
+    .box-item h4 { margin: 0 0 6px 0; font-size: 10pt; font-weight: bold; }
+    .box-item ul { margin: 0; padding-left: 18px; }
+    .box-item li { margin-bottom: 4px; }
+    .advice-box { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 14px; font-size: 10pt; color: #1e1b4b; white-space: pre-wrap; line-height: 1.6; margin-bottom: 24px; }
+    .ttd-section { display: flex; justify-content: space-between; margin-top: 30px; page-break-inside: avoid; }
+    .ttd-box { width: 40%; text-align: center; font-size: 10pt; }
+    .ttd-line { margin-top: 60px; border-bottom: 1px solid #334155; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>SMP IT BUDI UTOMO BINJAI</h2>
+    <h3>LEMBAR ANALISA KARAKTER 7 KAIH & BIMBINGAN KONSELING SISWA</h3>
+    <p>Jl. Budi Utomo No. 12, Kota Binjai, Sumatera Utara | Tanggal: ${todayStr}</p>
+  </div>
+
+  <div class="meta-box">
+    <table class="meta-table">
+      <tr>
+        <td class="label">Nama Siswa</td>
+        <td>: <strong>${s.name}</strong></td>
+        <td class="label">Kelas / Rombel</td>
+        <td>: ${s.kelas || s.education_level || '-'}</td>
+      </tr>
+      <tr>
+        <td class="label">NISN</td>
+        <td>: ${s.nisn || '-'}</td>
+        <td class="label">Predikat Karakter</td>
+        <td>: <strong>${studentAnalysisDetails.predicate}</strong> (Skor: ${studentAnalysisDetails.overallScore})</td>
+      </tr>
+      <tr>
+        <td class="label">Presensi Hari Ini</td>
+        <td>: ${studentAnalysisDetails.attendanceStatus}</td>
+        <td class="label">Skor Kuis Edukasi</td>
+        <td>: ${studentAnalysisDetails.quizAvgScore !== null ? `${studentAnalysisDetails.quizAvgScore} Poin` : 'Belum Ikut Kuis'}</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="sec-title">I. Diagnosa Kelebihan & Kelemahan Karakter</div>
+  <div class="box-grid">
+    <div class="box-item box-green">
+      <h4>🟢 Karakter Kuat & Unggul (Patut Diapresiasi):</h4>
+      <ul>${strongListHtml}</ul>
+    </div>
+    <div class="box-item box-red">
+      <h4>🔴 Karakter Belum Terlaksana / Lemah (Perlu Bimbingan):</h4>
+      <ul>${weakListHtml}</ul>
+    </div>
+  </div>
+
+  <div class="sec-title">II. Matriks Rincian 7 Pembiasaan Karakter KAIH</div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width:5%;text-align:center;">No</th>
+        <th style="width:25%;">Pilar 7 KAIH</th>
+        <th style="width:25%;">Status Keterlaksanaan</th>
+        <th style="width:10%;text-align:center;">Rencana</th>
+        <th style="width:10%;text-align:center;">Realisasi</th>
+        <th>Makna & Tujuan Karakter</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRowsHtml}
+    </tbody>
+  </table>
+
+  <div class="sec-title">III. Rekomendasi Nasihat & Arahan Pembinaan Guru</div>
+  <div class="advice-box">${customAdviceDraft}</div>
+
+  <div class="ttd-section">
+    <div class="ttd-box">
+      <p>Mengetahui,<br>Orang Tua / Wali Siswa</p>
+      <div class="ttd-line">${s.parentNotes?.name || '( .............................................. )'}</div>
+    </div>
+    <div class="ttd-box">
+      <p>Binjai, ${todayStr}<br>Guru Wali Kelas / Pembimbing</p>
+      <div class="ttd-line">${teacherProfile?.full_name || 'Guru Wali Kelas'}</div>
+    </div>
+  </div>
+</body>
+</html>`);
+
+    printWindow.document.close();
+    setTimeout(() => { printWindow.print(); }, 400);
   };
 
   const handleBulkEvaluate = async () => {
@@ -5242,7 +5516,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                   {/* Juara 2 (Perak) */}
                   {rankingData[1] && (
-                    <div onClick={() => openStudentActivitiesFromRanking(rankingData[1].student)} className="p-4 rounded-2xl bg-gradient-to-b from-slate-100 via-slate-50 to-white border-2 border-slate-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1 cursor-pointer hover:border-amber-400 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
+                    <div onClick={() => openStudentAnalysisModal(rankingData[1].student)} className="p-4 rounded-2xl bg-gradient-to-b from-slate-100 via-slate-50 to-white border-2 border-slate-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1 cursor-pointer hover:border-amber-400 transition-all group" title="Klik untuk analisa kelebihan, kelemahan & rekomendasi nasihat siswa">
                       <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-slate-400 text-white font-black text-xs shadow-xs">
                         🥈 JUARA 2
                       </span>
@@ -5261,14 +5535,14 @@ export default function Dashboard() {
                         Skor: {rankingData[1].finalScore} / 100
                       </div>
                       <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full group-hover:bg-amber-500 group-hover:text-white transition-colors">
-                        👁️ Rincian Kegiatan
+                        💡 Analisa & Nasihat Kegiatan
                       </span>
                     </div>
                   )}
 
                   {/* Juara 1 (Emas) */}
                   {rankingData[0] && (
-                    <div onClick={() => openStudentActivitiesFromRanking(rankingData[0].student)} className="p-5 rounded-2xl bg-gradient-to-b from-amber-100 via-amber-50 to-white border-2 border-amber-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105 cursor-pointer hover:ring-8 hover:ring-amber-200/60 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
+                    <div onClick={() => openStudentAnalysisModal(rankingData[0].student)} className="p-5 rounded-2xl bg-gradient-to-b from-amber-100 via-amber-50 to-white border-2 border-amber-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105 cursor-pointer hover:ring-8 hover:ring-amber-200/60 transition-all group" title="Klik untuk analisa kelebihan, kelemahan & rekomendasi nasihat siswa">
                       <span className="absolute -top-3.5 px-3.5 py-1 rounded-full bg-gradient-to-r from-amber-500 to-yellow-500 text-white font-black text-xs shadow-xs">
                         🥇 JUARA 1 UTAMA
                       </span>
@@ -5287,14 +5561,14 @@ export default function Dashboard() {
                         Skor Tertinggi: {rankingData[0].finalScore} / 100
                       </div>
                       <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-3 py-0.5 rounded-full group-hover:bg-amber-600 group-hover:text-white transition-colors">
-                        👁️ Rincian Kegiatan
+                        💡 Analisa & Nasihat Kegiatan
                       </span>
                     </div>
                   )}
 
                   {/* Juara 3 (Perunggu) */}
                   {rankingData[2] && (
-                    <div onClick={() => openStudentActivitiesFromRanking(rankingData[2].student)} className="p-4 rounded-2xl bg-gradient-to-b from-amber-50/60 via-orange-50/30 to-white border-2 border-amber-600/40 shadow-xs flex flex-col items-center text-center relative order-3 cursor-pointer hover:border-amber-500 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
+                    <div onClick={() => openStudentAnalysisModal(rankingData[2].student)} className="p-4 rounded-2xl bg-gradient-to-b from-amber-50/60 via-orange-50/30 to-white border-2 border-amber-600/40 shadow-xs flex flex-col items-center text-center relative order-3 cursor-pointer hover:border-amber-500 transition-all group" title="Klik untuk analisa kelebihan, kelemahan & rekomendasi nasihat siswa">
                       <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-amber-700 text-white font-black text-xs shadow-xs">
                         🥉 JUARA 3
                       </span>
@@ -5313,7 +5587,7 @@ export default function Dashboard() {
                         Skor: {rankingData[2].finalScore} / 100
                       </div>
                       <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full group-hover:bg-amber-500 group-hover:text-white transition-colors">
-                        👁️ Rincian Kegiatan
+                        💡 Analisa & Nasihat Kegiatan
                       </span>
                     </div>
                   )}
@@ -5342,7 +5616,7 @@ export default function Dashboard() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] px-1 font-bold">
                     <span className="text-slate-700">Daftar Peringkat Karakter Siswa</span>
                     <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-lg flex items-center gap-1">
-                      💡 Klik baris siswa atau tombol <b>👁️ Rincian</b> untuk membuka rincian kegiatan
+                      💡 Klik baris siswa atau tombol <b>💡 Analisa & Nasihat</b> untuk membuka rincian kegiatan
                     </span>
                   </div>
                   <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
@@ -5365,9 +5639,9 @@ export default function Dashboard() {
                         {rankingData.map((item, idx) => (
                           <tr
                             key={item.student.id}
-                            onClick={() => openStudentActivitiesFromRanking(item.student)}
+                            onClick={() => openStudentAnalysisModal(item.student)}
                             className="hover:bg-amber-100/60 transition-colors cursor-pointer group"
-                            title="Klik untuk membuka popup rincian seluruh kegiatan siswa"
+                            title="Klik untuk analisa kelebihan, kelemahan & rekomendasi nasihat siswa"
                           >
                             <td className="px-3.5 py-2.5 text-center font-black">
                               {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`}
@@ -5414,12 +5688,12 @@ export default function Dashboard() {
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  openStudentActivitiesFromRanking(item.student);
+                                  openStudentAnalysisModal(item.student);
                                 }}
                                 className="clay-btn-white px-2.5 py-1 text-[10px] font-bold text-amber-900 group-hover:bg-white rounded-xl inline-flex items-center gap-1 cursor-pointer shadow-2xs transition-all"
-                                title="Buka popup rincian kegiatan siswa"
+                                title="Buka Analisa Karakter & Rekomendasi Nasihat"
                               >
-                                👁️ Rincian
+                                💡 Analisa & Nasihat
                               </button>
                             </td>
                           </tr>
@@ -5450,7 +5724,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                   {/* Juara 2 Kedisiplinan */}
                   {disciplineRankingData[1] && (
-                    <div onClick={() => openStudentActivitiesFromRanking(disciplineRankingData[1].student)} className="p-4 rounded-2xl bg-gradient-to-b from-teal-50 via-slate-50 to-white border-2 border-teal-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1 cursor-pointer hover:border-teal-500 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
+                    <div onClick={() => openStudentAnalysisModal(disciplineRankingData[1].student)} className="p-4 rounded-2xl bg-gradient-to-b from-teal-50 via-slate-50 to-white border-2 border-teal-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1 cursor-pointer hover:border-teal-500 transition-all group" title="Klik untuk analisa kelebihan, kelemahan & rekomendasi nasihat siswa">
                       <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-teal-600 text-white font-black text-xs shadow-xs">
                         🥈 JUARA 2 DISIPLIN
                       </span>
@@ -5469,14 +5743,14 @@ export default function Dashboard() {
                         Skor Disiplin: {disciplineRankingData[1].finalScore} / 100
                       </div>
                       <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2.5 py-0.5 rounded-full group-hover:bg-teal-600 group-hover:text-white transition-colors">
-                        👁️ Rincian Kegiatan
+                        💡 Analisa & Nasihat Kegiatan
                       </span>
                     </div>
                   )}
 
                   {/* Juara 1 Kedisiplinan */}
                   {disciplineRankingData[0] && (
-                    <div onClick={() => openStudentActivitiesFromRanking(disciplineRankingData[0].student)} className="p-5 rounded-2xl bg-gradient-to-b from-emerald-100 via-emerald-50 to-white border-2 border-emerald-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105 cursor-pointer hover:ring-8 hover:ring-emerald-200/60 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
+                    <div onClick={() => openStudentAnalysisModal(disciplineRankingData[0].student)} className="p-5 rounded-2xl bg-gradient-to-b from-emerald-100 via-emerald-50 to-white border-2 border-emerald-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105 cursor-pointer hover:ring-8 hover:ring-emerald-200/60 transition-all group" title="Klik untuk analisa kelebihan, kelemahan & rekomendasi nasihat siswa">
                       <span className="absolute -top-3.5 px-3.5 py-1 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs shadow-xs">
                         🥇 TELADAN UTAMA DISIPLIN
                       </span>
@@ -5495,14 +5769,14 @@ export default function Dashboard() {
                         Skor Disiplin: {disciplineRankingData[0].finalScore} / 100
                       </div>
                       <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-900 bg-emerald-100 border border-emerald-300 px-3 py-0.5 rounded-full group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                        👁️ Rincian Kegiatan
+                        💡 Analisa & Nasihat Kegiatan
                       </span>
                     </div>
                   )}
 
                   {/* Juara 3 Kedisiplinan */}
                   {disciplineRankingData[2] && (
-                    <div onClick={() => openStudentActivitiesFromRanking(disciplineRankingData[2].student)} className="p-4 rounded-2xl bg-gradient-to-b from-cyan-50/70 via-slate-50 to-white border-2 border-cyan-400 shadow-xs flex flex-col items-center text-center relative order-3 cursor-pointer hover:border-cyan-600 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
+                    <div onClick={() => openStudentAnalysisModal(disciplineRankingData[2].student)} className="p-4 rounded-2xl bg-gradient-to-b from-cyan-50/70 via-slate-50 to-white border-2 border-cyan-400 shadow-xs flex flex-col items-center text-center relative order-3 cursor-pointer hover:border-cyan-600 transition-all group" title="Klik untuk analisa kelebihan, kelemahan & rekomendasi nasihat siswa">
                       <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-cyan-700 text-white font-black text-xs shadow-xs">
                         🥉 JUARA 3 DISIPLIN
                       </span>
@@ -5521,7 +5795,7 @@ export default function Dashboard() {
                         Skor Disiplin: {disciplineRankingData[2].finalScore} / 100
                       </div>
                       <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-cyan-800 bg-cyan-50 border border-cyan-200 px-2.5 py-0.5 rounded-full group-hover:bg-cyan-600 group-hover:text-white transition-colors">
-                        👁️ Rincian Kegiatan
+                        💡 Analisa & Nasihat Kegiatan
                       </span>
                     </div>
                   )}
@@ -5550,7 +5824,7 @@ export default function Dashboard() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] px-1 font-bold">
                     <span className="text-slate-700">Daftar Peringkat Kedisiplinan Waktu Siswa</span>
                     <span className="text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg flex items-center gap-1">
-                      💡 Klik baris siswa atau tombol <b>👁️ Rincian</b> untuk membuka rincian kegiatan
+                      💡 Klik baris siswa atau tombol <b>💡 Analisa & Nasihat</b> untuk membuka rincian kegiatan
                     </span>
                   </div>
                   <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
@@ -5574,9 +5848,9 @@ export default function Dashboard() {
                         {disciplineRankingData.map((item, idx) => (
                           <tr
                             key={item.student.id}
-                            onClick={() => openStudentActivitiesFromRanking(item.student)}
+                            onClick={() => openStudentAnalysisModal(item.student)}
                             className="hover:bg-emerald-100/60 transition-colors cursor-pointer group"
-                            title="Klik untuk membuka popup rincian seluruh kegiatan siswa"
+                            title="Klik untuk analisa kelebihan, kelemahan & rekomendasi nasihat siswa"
                           >
                             <td className="px-3.5 py-2.5 text-center font-black">
                               {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`}
@@ -5626,12 +5900,12 @@ export default function Dashboard() {
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  openStudentActivitiesFromRanking(item.student);
+                                  openStudentAnalysisModal(item.student);
                                 }}
                                 className="clay-btn-white px-2.5 py-1 text-[10px] font-bold text-emerald-800 group-hover:bg-white rounded-xl inline-flex items-center gap-1 cursor-pointer shadow-2xs transition-all"
-                                title="Buka popup rincian kegiatan siswa"
+                                title="Buka Analisa Karakter & Rekomendasi Nasihat"
                               >
-                                👁️ Rincian
+                                💡 Analisa & Nasihat
                               </button>
                             </td>
                           </tr>
@@ -5662,7 +5936,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                   {/* Juara 2 Kuis */}
                   {quizRankingData[1] && (
-                    <div onClick={() => openStudentActivitiesFromRanking(quizRankingData[1].student)} className="p-4 rounded-2xl bg-gradient-to-b from-indigo-50 via-slate-50 to-white border-2 border-indigo-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1 cursor-pointer hover:border-indigo-500 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
+                    <div onClick={() => openStudentAnalysisModal(quizRankingData[1].student)} className="p-4 rounded-2xl bg-gradient-to-b from-indigo-50 via-slate-50 to-white border-2 border-indigo-300 shadow-xs flex flex-col items-center text-center relative order-2 md:order-1 cursor-pointer hover:border-indigo-500 transition-all group" title="Klik untuk analisa kelebihan, kelemahan & rekomendasi nasihat siswa">
                       <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-indigo-500 text-white font-black text-xs shadow-xs">
                         🥈 JUARA 2 KUIS
                       </span>
@@ -5681,14 +5955,14 @@ export default function Dashboard() {
                         {quizRankingData[1].totalScore.toLocaleString('id-ID')} Poin
                       </div>
                       <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-indigo-800 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                        👁️ Rincian Kegiatan
+                        💡 Analisa & Nasihat Kegiatan
                       </span>
                     </div>
                   )}
 
                   {/* Juara 1 Kuis */}
                   {quizRankingData[0] && (
-                    <div onClick={() => openStudentActivitiesFromRanking(quizRankingData[0].student)} className="p-5 rounded-2xl bg-gradient-to-b from-purple-100 via-indigo-50 to-white border-2 border-indigo-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105 cursor-pointer hover:ring-8 hover:ring-indigo-200/60 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
+                    <div onClick={() => openStudentAnalysisModal(quizRankingData[0].student)} className="p-5 rounded-2xl bg-gradient-to-b from-purple-100 via-indigo-50 to-white border-2 border-indigo-400 shadow-md flex flex-col items-center text-center relative order-1 md:order-2 scale-105 cursor-pointer hover:ring-8 hover:ring-indigo-200/60 transition-all group" title="Klik untuk analisa kelebihan, kelemahan & rekomendasi nasihat siswa">
                       <span className="absolute -top-3.5 px-3.5 py-1 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black text-xs shadow-xs">
                         🥇 JUARA UTAMA KUIS
                       </span>
@@ -5707,14 +5981,14 @@ export default function Dashboard() {
                         {quizRankingData[0].totalScore.toLocaleString('id-ID')} Total Poin
                       </div>
                       <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-indigo-900 bg-indigo-100 border border-indigo-300 px-3 py-0.5 rounded-full group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                        👁️ Rincian Kegiatan
+                        💡 Analisa & Nasihat Kegiatan
                       </span>
                     </div>
                   )}
 
                   {/* Juara 3 Kuis */}
                   {quizRankingData[2] && (
-                    <div onClick={() => openStudentActivitiesFromRanking(quizRankingData[2].student)} className="p-4 rounded-2xl bg-gradient-to-b from-slate-100 via-indigo-50/20 to-white border-2 border-indigo-200 shadow-xs flex flex-col items-center text-center relative order-3 cursor-pointer hover:border-indigo-400 transition-all group" title="Klik untuk melihat rincian kegiatan siswa">
+                    <div onClick={() => openStudentAnalysisModal(quizRankingData[2].student)} className="p-4 rounded-2xl bg-gradient-to-b from-slate-100 via-indigo-50/20 to-white border-2 border-indigo-200 shadow-xs flex flex-col items-center text-center relative order-3 cursor-pointer hover:border-indigo-400 transition-all group" title="Klik untuk analisa kelebihan, kelemahan & rekomendasi nasihat siswa">
                       <span className="absolute -top-3 px-3 py-0.5 rounded-full bg-slate-600 text-white font-black text-xs shadow-xs">
                         🥉 JUARA 3 KUIS
                       </span>
@@ -5733,7 +6007,7 @@ export default function Dashboard() {
                         {quizRankingData[2].totalScore.toLocaleString('id-ID')} Poin
                       </div>
                       <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-indigo-800 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                        👁️ Rincian Kegiatan
+                        💡 Analisa & Nasihat Kegiatan
                       </span>
                     </div>
                   )}
@@ -5762,7 +6036,7 @@ export default function Dashboard() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] px-1 font-bold">
                     <span className="text-slate-700">Daftar Peringkat Kuis Edukasi Siswa</span>
                     <span className="text-indigo-800 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-lg flex items-center gap-1">
-                      💡 Klik baris siswa atau tombol <b>👁️ Rincian</b> untuk membuka rincian kegiatan
+                      💡 Klik baris siswa atau tombol <b>💡 Analisa & Nasihat</b> untuk membuka rincian kegiatan
                     </span>
                   </div>
                   <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
@@ -5786,9 +6060,9 @@ export default function Dashboard() {
                         {quizRankingData.map((item, idx) => (
                           <tr
                             key={item.student.id}
-                            onClick={() => openStudentActivitiesFromRanking(item.student)}
+                            onClick={() => openStudentAnalysisModal(item.student)}
                             className="hover:bg-indigo-100/60 transition-colors cursor-pointer group"
-                            title="Klik untuk membuka popup rincian seluruh kegiatan siswa"
+                            title="Klik untuk analisa kelebihan, kelemahan & rekomendasi nasihat siswa"
                           >
                             <td className="px-3.5 py-2.5 text-center font-black">
                               {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`}
@@ -5834,12 +6108,12 @@ export default function Dashboard() {
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  openStudentActivitiesFromRanking(item.student);
+                                  openStudentAnalysisModal(item.student);
                                 }}
                                 className="clay-btn-white px-2.5 py-1 text-[10px] font-bold text-indigo-800 group-hover:bg-white rounded-xl inline-flex items-center gap-1 cursor-pointer shadow-2xs transition-all"
-                                title="Buka popup rincian kegiatan siswa"
+                                title="Buka Analisa Karakter & Rekomendasi Nasihat"
                               >
-                                👁️ Rincian
+                                💡 Analisa & Nasihat
                               </button>
                             </td>
                           </tr>
@@ -5872,6 +6146,437 @@ export default function Dashboard() {
       )}
 
 
+      {/* ================= MODAL ANALISA RINCIAN KEGIATAN & NASIHAT SISWA (Diagnosa Kelebihan/Kelemahan & Bimbingan Guru) ================= */}
+      {isStudentAnalysisModalOpen && selectedStudentForAnalysis && studentAnalysisDetails && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center p-3 sm:p-5 bg-slate-900/80 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-5xl w-full p-5 sm:p-7 shadow-2xl border border-slate-100 my-6 max-h-[92vh] overflow-y-auto space-y-6 animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* Modal Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3.5">
+                <div className="relative">
+                  {selectedStudentForAnalysis.photo_url ? (
+                    <img
+                      src={selectedStudentForAnalysis.photo_url}
+                      alt={selectedStudentForAnalysis.name}
+                      className="w-14 h-14 rounded-2xl object-cover border-2 border-emerald-400 shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white font-black text-xl flex items-center justify-center border-2 border-emerald-300 shadow-sm">
+                      {getInitials(selectedStudentForAnalysis.name)}
+                    </div>
+                  )}
+                  <span className="absolute -bottom-1.5 -right-1.5 px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-600 text-white shadow-xs">
+                    {selectedStudentForAnalysis.kelas || selectedStudentForAnalysis.education_level || 'Siswa'}
+                  </span>
+                </div>
+
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-lg sm:text-xl font-black text-slate-900 leading-tight">
+                      {selectedStudentForAnalysis.name}
+                    </h3>
+                    <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                      {studentAnalysisDetails.predicate}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-2">
+                    <span>NISN: <b>{selectedStudentForAnalysis.nisn || '-'}</b></span>
+                    <span>•</span>
+                    <span>Skor Total: <b>{studentAnalysisDetails.overallScore}/100</b></span>
+                    <span>•</span>
+                    <span className="text-emerald-700 font-bold">Diagnosa Pembiasaan Karakter & Konseling</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-center">
+                <button
+                  type="button"
+                  onClick={handlePrintStudentCounseling}
+                  className="clay-btn-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 text-slate-700 hover:text-emerald-700 cursor-pointer shadow-xs"
+                  title="Cetak Lembar Analisa & Konseling PDF"
+                >
+                  <Printer size={15} />
+                  <span>Cetak Lembar Konseling PDF</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsStudentAnalysisModalOpen(false)}
+                  className="p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer transition-all"
+                  title="Tutup Modal"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Metric Strip (4 cards) */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-emerald-200 shadow-2xs">
+                <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider">7 KAIH Terlaksana</span>
+                <p className="text-xl font-black text-emerald-900 mt-1">
+                  {studentAnalysisDetails.completedHabitsCount} <span className="text-xs font-semibold text-emerald-700">/ 7 Kebiasaan</span>
+                </p>
+                <span className="text-[10px] text-emerald-700 block mt-0.5 font-medium">
+                  Total {studentAnalysisDetails.totalRealized} kali aktivitas realisasi
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-200 shadow-2xs">
+                <span className="text-[10px] font-black uppercase text-blue-800 tracking-wider">Status Presensi</span>
+                <p className="text-base sm:text-lg font-black text-blue-900 mt-1 flex items-center gap-1">
+                  {studentAnalysisDetails.attendanceStatus}
+                </p>
+                <span className="text-[10px] text-blue-700 block mt-0.5 font-medium">
+                  Kehadiran hari ini
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-50 to-pink-50/50 border border-purple-200 shadow-2xs">
+                <span className="text-[10px] font-black uppercase text-purple-800 tracking-wider">Skor Kuis Edukasi</span>
+                <p className="text-xl font-black text-purple-900 mt-1">
+                  {studentAnalysisDetails.quizAvgScore !== null ? `${studentAnalysisDetails.quizAvgScore}` : '-'} 
+                  <span className="text-xs font-semibold text-purple-700"> {studentAnalysisDetails.quizAvgScore !== null ? 'Poin' : 'Belum Ada'}</span>
+                </p>
+                <span className="text-[10px] text-purple-700 block mt-0.5 font-medium">
+                  Rata-rata hasil game kuis
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50/50 border border-amber-200 shadow-2xs">
+                <span className="text-[10px] font-black uppercase text-amber-800 tracking-wider">Karakter Unggul vs Lemah</span>
+                <p className="text-base sm:text-lg font-black text-amber-900 mt-1 flex items-center gap-1.5">
+                  <span className="text-emerald-700">🟢 {studentAnalysisDetails.strongList.length}</span>
+                  <span className="text-slate-300">/</span>
+                  <span className="text-rose-700">🔴 {studentAnalysisDetails.weakList.length}</span>
+                </p>
+                <span className="text-[10px] text-amber-700 block mt-0.5 font-medium">
+                  Kekuatan vs Perlu Bimbingan
+                </span>
+              </div>
+            </div>
+
+            {/* DUAL DIAGNOSIS: KELEBIHAN (Bagus) vs KELEMAHAN (Lemah / Belum Dikerjakan) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              {/* Kolom Kiri: Karakter Kuat / Bagus */}
+              <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50/50 p-4 sm:p-5 flex flex-col justify-between shadow-2xs">
+                <div>
+                  <div className="flex items-center justify-between pb-3 border-b border-emerald-200/80 mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-sm shadow-2xs">
+                        <ThumbsUp size={16} />
+                      </span>
+                      <div>
+                        <h4 className="font-black text-emerald-950 text-sm">
+                          Kebiasaan Bagus & Disiplin (Kelebihan)
+                        </h4>
+                        <p className="text-[11px] text-emerald-700 font-medium">
+                          Karakter unggul yang konsisten terlaksana tepat waktu
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-200/80 text-emerald-900 font-black text-xs">
+                      {studentAnalysisDetails.strongList.length} Kebiasaan
+                    </span>
+                  </div>
+
+                  {studentAnalysisDetails.strongList.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {studentAnalysisDetails.strongList.map((h) => (
+                        <div key={h.catName} className="p-2.5 rounded-xl bg-white border border-emerald-200 shadow-2xs space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                              <span>{h.icon}</span> {h.catName}
+                            </span>
+                            <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                              ✅ {h.realizedCount}x Dikerjakan (Disiplin)
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 leading-snug">
+                            <b>Makna:</b> {h.meaning}
+                          </p>
+                          {h.adviceTip?.high?.[0] && (
+                            <p className="text-[10px] text-emerald-800 bg-emerald-50/70 p-1.5 rounded-lg border border-emerald-100 italic">
+                              💡 <b>Catatan Positif:</b> {h.adviceTip.high[0]}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-xl bg-white/70 border border-dashed border-emerald-300 text-center text-xs text-slate-500">
+                      Belum ada kebiasaan yang mencapai predikat konsisten tepat waktu. Berikan motivasi harian untuk memulai kebiasaan awal.
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-emerald-200/60 text-[11px] text-emerald-900 font-semibold flex items-center gap-1.5">
+                  <CheckCircle size={14} className="text-emerald-600" />
+                  <span>Rekomendasi: Berikan apresiasi di depan kelas atau melalui pesan chat.</span>
+                </div>
+              </div>
+
+              {/* Kolom Kanan: Karakter Lemah / Belum Dikerjakan */}
+              <div className="rounded-2xl border-2 border-rose-300 bg-rose-50/50 p-4 sm:p-5 flex flex-col justify-between shadow-2xs">
+                <div>
+                  <div className="flex items-center justify-between pb-3 border-b border-rose-200/80 mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center font-black text-sm shadow-2xs">
+                        <AlertTriangle size={16} />
+                      </span>
+                      <div>
+                        <h4 className="font-black text-rose-950 text-sm">
+                          Kebiasaan Lemah & Belum Dikerjakan
+                        </h4>
+                        <p className="text-[11px] text-rose-700 font-medium">
+                          Aktivitas nihil atau sering terlambat (fokus bimbingan guru)
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-rose-200/80 text-rose-900 font-black text-xs">
+                      {studentAnalysisDetails.weakList.length + studentAnalysisDetails.moderateList.length} Perlu Perhatian
+                    </span>
+                  </div>
+
+                  {studentAnalysisDetails.weakList.length > 0 || studentAnalysisDetails.moderateList.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {studentAnalysisDetails.weakList.map((h) => (
+                        <div key={h.catName} className="p-2.5 rounded-xl bg-white border border-rose-200 shadow-2xs space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                              <span>{h.icon}</span> {h.catName}
+                            </span>
+                            <span className="text-[10px] font-black text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">
+                              ❌ Belum Dikerjakan (Nihil)
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 leading-snug">
+                            <b>Dampak:</b> Karakter {h.meaning.toLowerCase()} belum terasah pada diri siswa.
+                          </p>
+                          {h.adviceTip?.low?.[0] && (
+                            <p className="text-[10px] text-rose-800 bg-rose-50/70 p-1.5 rounded-lg border border-rose-100 italic">
+                              🎯 <b>Arahan Perbaikan:</b> {h.adviceTip.low[0]}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+
+                      {studentAnalysisDetails.moderateList.map((h) => (
+                        <div key={h.catName} className="p-2.5 rounded-xl bg-white border border-amber-200 shadow-2xs space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                              <span>{h.icon}</span> {h.catName}
+                            </span>
+                            <span className="text-[10px] font-black text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                              ⚠️ Dikerjakan Sering Terlambat (+{h.avgDelta || 0} mnt)
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 leading-snug">
+                            <b>Makna:</b> {h.meaning}
+                          </p>
+                          {h.adviceTip?.mid?.[0] && (
+                            <p className="text-[10px] text-amber-900 bg-amber-50/70 p-1.5 rounded-lg border border-amber-100 italic">
+                              ⏰ <b>Saran Kedisiplinan:</b> {h.adviceTip.mid[0]}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-xl bg-white/70 border border-dashed border-emerald-300 text-center text-xs text-emerald-800 font-bold">
+                      🎉 Luar biasa! Seluruh 7 kebiasaan KAIH sudah terlaksana dengan sangat baik dan tertib!
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-rose-200/60 text-[11px] text-rose-900 font-semibold flex items-center gap-1.5">
+                  <AlertTriangle size={14} className="text-rose-600" />
+                  <span>Rekomendasi: Berikan pembinaan personal atau ingatkan melalui pesan notifikasi di bawah.</span>
+                </div>
+              </div>
+
+            </div>
+
+            {/* TABEL RINCIAN LENGKAP 7 KEBIASAAN KAIH */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-black text-slate-800 text-sm flex items-center gap-2">
+                  <ClipboardList size={16} className="text-teal-600" />
+                  <span>Matriks Rincian & Keterlaksanaan 7 Karakter KAIH</span>
+                </h4>
+                <span className="text-xs text-slate-500 font-medium">
+                  {studentAnalysisDetails.completedHabitsCount} dari 7 terlaksana
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {studentAnalysisDetails.habits.map((h) => {
+                  const act = h.latestAct;
+                  return (
+                    <div
+                      key={h.catName}
+                      className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between ${
+                        h.status === 'strong'
+                          ? 'bg-emerald-50/40 border-emerald-200 hover:border-emerald-400'
+                          : h.status === 'moderate'
+                          ? 'bg-amber-50/40 border-amber-200 hover:border-amber-400'
+                          : 'bg-rose-50/40 border-rose-200 hover:border-rose-400'
+                      }`}
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-1.5">
+                          <span className="font-black text-slate-800 text-xs flex items-center gap-1.5">
+                            <span className="text-base">{h.icon}</span>
+                            <span>{h.catName}</span>
+                          </span>
+                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border ${h.badgeCls}`}>
+                            {h.isCompleted ? (h.status === 'strong' ? '🟢 Bagus' : '🟡 Molor') : '🔴 Belum'}
+                          </span>
+                        </div>
+
+                        <p className="text-[11px] text-slate-600 leading-snug line-clamp-2" title={h.meaning}>
+                          {h.meaning}
+                        </p>
+
+                        <div className="bg-white/80 rounded-xl p-2 border border-slate-100 text-[10px] space-y-1">
+                          <div className="flex justify-between text-slate-500 font-medium">
+                            <span>Jam Rencana:</span>
+                            <span className="font-bold text-slate-800">{act?.plannedTime || '-'}</span>
+                          </div>
+                          <div className="flex justify-between text-slate-500 font-medium">
+                            <span>Jam Realisasi:</span>
+                            <span className="font-bold text-emerald-800">{act?.realizedTime || '-'}</span>
+                          </div>
+                          {h.isCompleted && (
+                            <div className="flex justify-between text-slate-500 font-medium">
+                              <span>Ketepatan:</span>
+                              <span className={`font-bold ${h.status === 'strong' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                {h.status === 'strong' ? 'Tepat Waktu' : `Terlambat (${h.avgDelta || 0} mnt)`}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-slate-500 font-medium">
+                            <span>Frekuensi Realisasi:</span>
+                            <span className="font-bold text-slate-800">{h.realizedCount} kali</span>
+                          </div>
+                        </div>
+
+                        {act?.photo_url && (
+                          <div className="flex items-center gap-2 pt-1">
+                            <img
+                              src={act.photo_url}
+                              alt={h.catName}
+                              onClick={() => setZoomedImage(act.photo_url)}
+                              className="w-12 h-12 rounded-lg object-cover border border-slate-200 cursor-pointer hover:opacity-85 shadow-2xs"
+                              title="Klik untuk memperbesar foto bukti"
+                            />
+                            <div className="text-[10px] text-slate-500 leading-tight">
+                              <p className="font-bold text-slate-700">Foto Bukti Terkini</p>
+                              <p className="line-clamp-1">{act.description || 'Tanpa catatan'}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-500">
+                        <b>Indikator:</b> {h.indicator}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* KOTAK REKOMENDASI NASIHAT & BIMBINGAN GURU */}
+            <div className="bg-gradient-to-br from-indigo-50/90 via-purple-50/30 to-white border-2 border-indigo-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow-2xs">
+                    <Lightbulb size={16} />
+                  </span>
+                  <div>
+                    <h4 className="font-black text-indigo-950 text-sm">
+                      Rekomendasi Nasihat Guru untuk Siswa
+                    </h4>
+                    <p className="text-[11px] text-indigo-700 font-medium">
+                      Otomatis dirumuskan berdasarkan kegiatan yang bagus (kelebihan) dan belum dikerjakan (kelemahan). Guru dapat mengedit teks ini sebelum dikirim.
+                    </p>
+                  </div>
+                </div>
+
+                {copiedAdvice && (
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs animate-in fade-in">
+                    ✅ Nasihat Disalin ke Clipboard!
+                  </span>
+                )}
+              </div>
+
+              <textarea
+                value={customAdviceDraft}
+                onChange={(e) => setCustomAdviceDraft(e.target.value)}
+                rows={6}
+                className="w-full text-xs sm:text-sm p-3.5 rounded-xl border border-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white shadow-2xs text-slate-800 leading-relaxed font-sans"
+                placeholder="Tuliskan nasihat atau bimbingan khusus untuk siswa ini..."
+              />
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <p className="text-[11px] text-slate-500">
+                  💡 Nasihat ini siap dikirim ke HP siswa via fitur Chat/Notifikasi atau disalin untuk WA wali siswa.
+                </p>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(customAdviceDraft);
+                      setCopiedAdvice(true);
+                      setTimeout(() => setCopiedAdvice(false), 2500);
+                    }}
+                    className="clay-btn-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 text-slate-700 hover:text-indigo-700 cursor-pointer shadow-xs transition-all"
+                  >
+                    <Copy size={14} />
+                    <span>Salin Teks Nasihat</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChatTarget({
+                        student: selectedStudentForAnalysis,
+                        locationName: 'Laporan Analisa & Ranking Siswa',
+                        initialText: customAdviceDraft,
+                      });
+                    }}
+                    className="clay-btn-coral px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                    title="Buka Chat Drawer dan kirim nasihat ini langsung ke HP siswa"
+                  >
+                    <MessageCircle size={14} />
+                    <span>Kirim Nasihat ke HP Siswa 💬</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Bottom Bar */}
+            <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+              <span className="text-[11px] text-slate-400">
+                Laporan Diagnosa Karakter 7 KAIH • SMP IT Budi Utomo Binjai
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsStudentAnalysisModalOpen(false)}
+                className="clay-btn-white px-5 py-2 font-bold text-xs rounded-xl cursor-pointer shadow-xs"
+              >
+                Kembali ke Laporan Analisa & Ranking
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* Chat / notifikasi dari Peta Sebaran ke HP siswa */}
       {chatTarget && (
         <MapChatDrawer
@@ -5880,6 +6585,7 @@ export default function Dashboard() {
           senderName={teacherProfile?.full_name || 'Guru'}
           senderRole={currentUserRole === 'admin' ? 'admin' : 'guru'}
           readOnly={isReadOnly}
+          initialText={chatTarget.initialText}
           onClose={() => setChatTarget(null)}
         />
       )}

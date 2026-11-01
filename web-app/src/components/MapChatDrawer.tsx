@@ -26,6 +26,7 @@ export default function MapChatDrawer({
   senderName,
   senderRole,
   readOnly,
+  initialText,
   onClose,
 }: {
   student: { id: string; name: string; photo_url?: string; kelas?: string };
@@ -33,14 +34,21 @@ export default function MapChatDrawer({
   senderName: string;
   senderRole: string;
   readOnly: boolean;
+  initialText?: string;
   onClose: () => void;
 }) {
   const [messages, setMessages] = useState<Msg[]>([]);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText || '');
   const [asNotif, setAsNotif] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (initialText) {
+      setText(initialText);
+    }
+  }, [initialText]);
 
   useEffect(() => {
     let active = true;
