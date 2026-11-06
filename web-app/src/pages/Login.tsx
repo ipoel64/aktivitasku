@@ -22,6 +22,7 @@ import type {
   LandingPageConfig,
   KaihSlideConfig,
 } from '../utils/appConfig';
+import { resolveLoginIdentifier } from '../utils/authResolver';
 
 function generateCaptchaCode(): string {
   const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -83,7 +84,11 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const cleanEmail = email.trim();
+      const cleanEmail = await resolveLoginIdentifier(email, 'guru');
+      if (!cleanEmail) {
+        throw new Error('Silakan masukkan Email, NIK, atau NISN yang terdaftar.');
+      }
+
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
@@ -116,7 +121,7 @@ export default function Login() {
       }
     } catch (err: any) {
       const msg = err?.message === 'Invalid login credentials'
-        ? 'Email atau Password yang Anda masukkan salah. Pastikan akun sudah terdaftar oleh Admin.'
+        ? 'Email, NIK, NISN, atau Kata Sandi yang Anda masukkan salah. Pastikan akun sudah terdaftar oleh Admin.'
         : err?.message || 'Gagal masuk ke sistem.';
       setError(msg);
       refreshCaptcha();
@@ -308,11 +313,16 @@ export default function Login() {
           )}
 
           <form onSubmit={handleLogin} className="relative space-y-4">
-            {/* Email / Username Field */}
+            {/* Email / NIK / NISN Field */}
             <div>
-              <label className={`block text-xs font-extrabold mb-1.5 ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>
-                Email / Username <span className="text-red-500 font-bold">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className={`block text-xs font-extrabold ${darkMode ? 'text-slate-200' : 'text-slate-800'}`}>
+                  Email / NIK / NISN <span className="text-red-500 font-bold">*</span>
+                </label>
+                <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200/60 dark:border-blue-800">
+                  Bisa NIK / NISN
+                </span>
+              </div>
               <div
                 className={`flex items-center rounded-xl border overflow-hidden transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-600 ${
                   darkMode
@@ -330,16 +340,19 @@ export default function Login() {
                   <User className="w-4 h-4" />
                 </div>
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="contoh: guru1@budiutomo.com"
+                  placeholder="Ketik Email, NIK Guru, atau NISN Siswa"
                   className={`w-full px-3 py-2.5 text-xs sm:text-sm font-bold bg-transparent focus:outline-none select-text ${
                     darkMode ? 'text-white placeholder-slate-400' : 'text-slate-900 placeholder-slate-400'
                   }`}
                 />
               </div>
+              <p className={`mt-1 text-[10px] font-medium ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                Guru dapat masuk menggunakan NIK KTP atau Email. Siswa dapat menggunakan NISN.
+              </p>
             </div>
 
             {/* Password Field */}

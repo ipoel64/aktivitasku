@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import kaihLogoAsset from '../../assets/kaih_logo.png';
 import budiUtomoLogoAsset from '../../assets/budi_utomo_logo.png';
 import { getUserStudentProfile, isProfileComplete, clearUserCache } from '../utils/userCache';
+import { resolveStudentLoginIdentifier, generateStudentVirtualEmail } from '../utils/authResolver';
 
 export default function LoginScreen() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -32,6 +33,7 @@ export default function LoginScreen() {
 
   // Register State
   const [regFullName, setRegFullName] = useState('');
+  const [regNisn, setRegNisn] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
@@ -43,14 +45,20 @@ export default function LoginScreen() {
   // ─── LOGIN HANDLER ────────────────────────────────────
   async function signIn() {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Perhatian', 'Silakan isi Email dan Password terlebih dahulu.');
+      Alert.alert('Perhatian', 'Silakan isi Email atau NISN serta Kata Sandi terlebih dahulu.');
       return;
     }
 
     setLoading(true);
     try {
       clearUserCache();
-      const cleanEmail = email.trim().toLowerCase();
+      const cleanEmail = await resolveStudentLoginIdentifier(email);
+      if (!cleanEmail) {
+        setLoading(false);
+        Alert.alert('Gagal Login', 'Email atau NISN tidak valid.');
+        return;
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password: password,
@@ -64,9 +72,9 @@ export default function LoginScreen() {
             'Akun Anda belum diverifikasi. Silakan buka inbox Gmail Anda dan klik tautan konfirmasi pendaftaran terlebih dahulu.'
           );
         } else if (error.message.toLowerCase().includes('invalid login credentials')) {
-          Alert.alert('Gagal Login ❌', 'Email atau kata sandi yang Anda masukkan salah. Silakan periksa kembali.');
+          Alert.alert('Gagal Login ❌', 'Email, NISN, atau kata sandi yang Anda masukkan salah. Silakan periksa kembali.');
         } else {
-          Alert.alert('Gagal Login', error.message || 'Email atau password salah.');
+          Alert.alert('Gagal Login', error.message || 'Email, NISN, atau password salah.');
         }
         return;
       }
@@ -88,7 +96,8 @@ export default function LoginScreen() {
           .single();
 
         if (newProf) {
-          await supabase.from('students').insert({ profile_id: newProf.id });
+          const nisnVal = data.user.user_metadata?.nisn || null;
+          await supabase.from('students').insert({ profile_id: newProf.id, nisn: nisnVal });
           userProfile = await getUserStudentProfile(true);
         }
       }
@@ -117,14 +126,15 @@ export default function LoginScreen() {
     }
   }
 
-  // ─── REGISTER HANDLER (WITH GMAIL VERIFICATION) ────────
+  // ─── REGISTER HANDLER (SUPPORT NISN & EMAIL) ────────
   async function signUp() {
     if (!regFullName.trim()) {
       Alert.alert('Perhatian', 'Silakan isi Nama Lengkap Siswa.');
       return;
     }
-    if (!regEmail.trim()) {
-      Alert.alert('Perhatian', 'Silakan isi Alamat Email (Gmail).');
+    const cleanNisn = regNisn.replace(/[\s.-]/g, '').trim();
+    if (!cleanNisn) {
+      Alert.alert('Perhatian', 'Silakan isi NISN Siswa (Nomor Induk Siswa Nasional).');
       return;
     }
     if (!regPassword || regPassword.length < 6) {
@@ -138,11 +148,16 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
+      const hasPersonalEmail = Boolean(regEmail.trim());
+      const effectiveEmail = hasPersonalEmail
+        ? regEmail.trim().toLowerCase()
+        : generateStudentVirtualEmail(cleanNisn);
+
       const { data, error } = await supabase.auth.signUp({
-        email: regEmail.trim(),
+        email: effectiveEmail,
         password: regPassword,
         options: {
-          data: { full_name: regFullName.trim() },
+          data: { full_name: regFullName.trim(), nisn: cleanNisn },
           emailRedirectTo: 'mobileapp://login',
         },
       });
@@ -155,7 +170,7 @@ export default function LoginScreen() {
 
       if (data.user) {
         // Create initial user_profile record
-        const { data: profData, error: profError } = await supabase
+        const { data: profData } = await supabase
           .from('user_profiles')
           .upsert({
             user_id: data.user.id,
@@ -165,15 +180,33 @@ export default function LoginScreen() {
           .single();
 
         if (profData) {
-          // Create initial empty student record linked to profile
+          // Create student record linked to profile with NISN
           await supabase.from('students').insert({
             profile_id: profData.id,
+            nisn: cleanNisn,
           });
         }
       }
 
-      // Show Gmail verification modal notice
-      setRegSuccessModalVisible(true);
+      if (hasPersonalEmail) {
+        // Show Gmail verification modal notice for users with personal email
+        setRegSuccessModalVisible(true);
+      } else {
+        Alert.alert(
+          'Pendaftaran Berhasil! 🎉',
+          `Akun siswa ananda ${regFullName.trim()} dengan NISN: ${cleanNisn} telah berhasil dibuat!\n\nSilakan masuk menggunakan NISN dan Password Anda.`,
+          [
+            {
+              text: 'Masuk Sekarang',
+              onPress: () => {
+                setMode('login');
+                setEmail(cleanNisn);
+                setPassword(regPassword);
+              },
+            },
+          ]
+        );
+      }
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Terjadi kesalahan saat pendaftaran.');
     } finally {
@@ -249,19 +282,24 @@ export default function LoginScreen() {
             /* ═══ FORM LOGIN ═══ */
             <>
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Alamat Email (Gmail)</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.label}>Email atau NISN Siswa</Text>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563eb' }}>Bisa NISN</Text>
+                </View>
                 <View style={styles.inputWrapper}>
-                  <Ionicons name="mail-outline" size={20} color="#64748b" style={styles.inputIcon} />
+                  <Ionicons name="card-outline" size={20} color="#64748b" style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
                     onChangeText={setEmail}
                     value={email}
-                    placeholder="nama@gmail.com"
+                    placeholder="Ketik Email atau 10 digit NISN..."
                     placeholderTextColor="#94a3b8"
                     autoCapitalize="none"
-                    keyboardType="email-address"
                   />
                 </View>
+                <Text style={{ fontSize: 10, color: '#64748b', marginTop: 4, marginLeft: 2 }}>
+                  Siswa dapat login menggunakan nomor NISN atau alamat email.
+                </Text>
               </View>
 
               <View style={styles.inputGroup}>
@@ -317,19 +355,47 @@ export default function LoginScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email Gmail Siswa *</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.label}>NISN Siswa (Wajib) *</Text>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#2563eb' }}>10 Digit</Text>
+                </View>
+                <View style={styles.inputWrapper}>
+                  <Ionicons name="card-outline" size={20} color="#64748b" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    onChangeText={setRegNisn}
+                    value={regNisn}
+                    placeholder="Contoh: 0081234567"
+                    placeholderTextColor="#94a3b8"
+                    keyboardType="numeric"
+                    autoCapitalize="none"
+                  />
+                </View>
+                <Text style={{ fontSize: 10, color: '#64748b', marginTop: 4, marginLeft: 2 }}>
+                  Nomor Induk Siswa Nasional digunakan sebagai ID login utama Anda.
+                </Text>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.label}>Email Siswa (Opsional)</Text>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>Boleh Kosong</Text>
+                </View>
                 <View style={styles.inputWrapper}>
                   <Ionicons name="mail-outline" size={20} color="#64748b" style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
                     onChangeText={setRegEmail}
                     value={regEmail}
-                    placeholder="contoh@gmail.com"
+                    placeholder="contoh@gmail.com (jika punya)"
                     placeholderTextColor="#94a3b8"
                     autoCapitalize="none"
                     keyboardType="email-address"
                   />
                 </View>
+                <Text style={{ fontSize: 10, color: '#64748b', marginTop: 4, marginLeft: 2 }}>
+                  Jika belum punya email, kosongkan saja. Akun tetap dapat dibuat dan login dengan NISN.
+                </Text>
               </View>
 
               <View style={styles.inputGroup}>

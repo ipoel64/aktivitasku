@@ -50,6 +50,7 @@ import type {
   KaihSlideConfig,
   SchoolLocationConfig,
 } from '../utils/appConfig';
+import { isVirtualEmail } from '../utils/authResolver';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://zshxtebkopkvhdthavhb.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_BWHkngZK_Qym3GwhsJfTYQ___iWtw-n';
@@ -89,6 +90,7 @@ interface BulkImportRow {
   jurusan: string;
   jenjang: string;
   extra: string;
+  nik?: string;
   status?: 'pending' | 'success' | 'error';
   message?: string;
 }
@@ -141,6 +143,7 @@ export default function AdminDashboard() {
   const [newPassword, setNewPassword] = useState('');
   const [newFullName, setNewFullName] = useState('');
   const [newRole, setNewRole] = useState<'siswa' | 'guru' | 'kepsek' | 'yayasan' | 'admin'>('guru');
+  const [newTeacherNik, setNewTeacherNik] = useState('');
   const [newTeacherClasses, setNewTeacherClasses] = useState<string[]>([]);
   const [newTeacherAllClasses, setNewTeacherAllClasses] = useState(false);
   const [newTeacherSubjects, setNewTeacherSubjects] = useState('');
@@ -156,6 +159,7 @@ export default function AdminDashboard() {
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [editFullName, setEditFullName] = useState('');
   const [editRole, setEditRole] = useState<'siswa' | 'guru' | 'kepsek' | 'yayasan' | 'admin'>('guru');
+  const [editTeacherNik, setEditTeacherNik] = useState('');
   const [editTeacherClasses, setEditTeacherClasses] = useState<string[]>([]);
   const [editTeacherAllClasses, setEditTeacherAllClasses] = useState(false);
   const [editTeacherSubjects, setEditTeacherSubjects] = useState('');
@@ -399,13 +403,14 @@ export default function AdminDashboard() {
 
   // ================= SINGLE ACCOUNT PROVISIONING =================
   const provisionSingleAccount = async (params: {
-    email: string;
+    email?: string;
     password: string;
     fullName: string;
     role: 'siswa' | 'guru' | 'kepsek' | 'yayasan' | 'admin';
     teacherClasses?: string[];
     teacherSubjects?: string;
     teacherPosition?: string;
+    teacherNik?: string;
     studentJenjang?: string;
     studentKelas?: string;
     studentJurusan?: string;
@@ -415,8 +420,20 @@ export default function AdminDashboard() {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
+    let effectiveEmail = params.email?.trim();
+    if (!effectiveEmail) {
+      if (params.role === 'siswa') {
+        const cleanNisn = (params.studentNisn || '').replace(/\D/g, '');
+        effectiveEmail = cleanNisn ? `${cleanNisn}@siswa.budiutomo.id` : `${Date.now()}@siswa.budiutomo.id`;
+      } else {
+        const cleanNik = (params.teacherNik || '').replace(/\D/g, '');
+        const cleanName = params.fullName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        effectiveEmail = cleanNik ? `${cleanNik}@guru.budiutomo.id` : `${cleanName || 'guru'}@guru.budiutomo.id`;
+      }
+    }
+
     const { data: authData, error: authError } = await tempSupabase.auth.signUp({
-      email: params.email.trim(),
+      email: effectiveEmail,
       password: params.password,
     });
 
@@ -428,7 +445,7 @@ export default function AdminDashboard() {
     // 1. Upsert into public.users
     const { error: userError } = await supabase.from('users').upsert({
       id: userId,
-      email: params.email.trim(),
+      email: effectiveEmail,
       role: params.role,
       is_active: true,
     });
@@ -455,6 +472,7 @@ export default function AdminDashboard() {
       await supabase.from('teachers').upsert(
         {
           profile_id: profileData.id,
+          nik: params.teacherNik ? params.teacherNik.trim() : null,
           subjects: params.teacherSubjects || null,
           position: params.teacherPosition || 'Guru / Wali Kelas',
           certifications: JSON.stringify({
@@ -502,6 +520,7 @@ export default function AdminDashboard() {
         teacherClasses: finalTeacherClasses,
         teacherSubjects: newTeacherSubjects,
         teacherPosition: newTeacherPosition,
+        teacherNik: newTeacherNik,
         studentJenjang: newStudentJenjang,
         studentKelas: newStudentKelas,
         studentJurusan: newStudentJurusan,
@@ -512,6 +531,7 @@ export default function AdminDashboard() {
       setNewEmail('');
       setNewPassword('');
       setNewFullName('');
+      setNewTeacherNik('');
       setNewTeacherClasses([]);
       setNewTeacherAllClasses(false);
       setNewTeacherSubjects('');
@@ -542,11 +562,13 @@ export default function AdminDashboard() {
         setEditTeacherAllClasses(false);
         setEditTeacherClasses(classes);
       }
+      setEditTeacherNik(tRow?.nik || '');
       setEditTeacherSubjects(tRow?.subjects || '');
       setEditTeacherPosition(tRow?.position || 'Guru / Wali Kelas');
     } else {
       setEditTeacherAllClasses(false);
       setEditTeacherClasses([]);
+      setEditTeacherNik('');
       setEditTeacherSubjects('');
       setEditTeacherPosition('Guru / Wali Kelas');
     }
@@ -598,6 +620,7 @@ export default function AdminDashboard() {
         const existingTeacher = teachersMap[profileId];
         const payload = {
           profile_id: profileId,
+          nik: editTeacherNik ? editTeacherNik.trim() : null,
           subjects: editTeacherSubjects || null,
           position: editTeacherPosition || 'Guru / Wali Kelas',
           certifications: JSON.stringify({
@@ -655,6 +678,7 @@ export default function AdminDashboard() {
       {
         NAMA_LENGKAP: 'Budi Santoso, S.Pd',
         EMAIL: 'budi.guru@budiutomo.com',
+        NIK_GURU: '3201123456780001',
         PASSWORD: 'password123',
         ROLE: 'guru',
         KELAS: 'XI Bisnis Digital;XI TKJ',
@@ -664,7 +688,8 @@ export default function AdminDashboard() {
       },
       {
         NAMA_LENGKAP: 'Siti Aminah, M.Pd',
-        EMAIL: 'kepsek@budiutomo.com',
+        EMAIL: '',
+        NIK_GURU: '3201987654320002',
         PASSWORD: 'password123',
         ROLE: 'kepsek',
         KELAS: '',
@@ -675,6 +700,7 @@ export default function AdminDashboard() {
       {
         NAMA_LENGKAP: 'H. Ahmad Wijaya',
         EMAIL: 'yayasan@budiutomo.com',
+        NIK_GURU: '',
         PASSWORD: 'password123',
         ROLE: 'yayasan',
         KELAS: '',
@@ -684,7 +710,8 @@ export default function AdminDashboard() {
       },
       {
         NAMA_LENGKAP: 'Andi Pratama',
-        EMAIL: 'andi.siswa@budiutomo.com',
+        EMAIL: '',
+        NIK_GURU: '',
         PASSWORD: 'password123',
         ROLE: 'siswa',
         KELAS: 'XI Bisnis Digital',
@@ -695,6 +722,7 @@ export default function AdminDashboard() {
       {
         NAMA_LENGKAP: 'Dewi Lestari',
         EMAIL: 'dewi.siswa@budiutomo.com',
+        NIK_GURU: '',
         PASSWORD: 'password123',
         ROLE: 'siswa',
         KELAS: 'Kelas VIII',
@@ -706,13 +734,14 @@ export default function AdminDashboard() {
 
     const guideData = [
       { KOLOM: 'NAMA_LENGKAP', DESKRIPSI: 'Nama lengkap beserta gelar (Wajib)', CONTOH: 'Dra. Hj. Siti Rahmah, M.Pd' },
-      { KOLOM: 'EMAIL', DESKRIPSI: 'Alamat email aktif untuk login sistem (Wajib & Unik)', CONTOH: 'siti.guru@budiutomo.com' },
+      { KOLOM: 'EMAIL', DESKRIPSI: 'Alamat email login. OPSIONAL: boleh kosong jika NISN (siswa) atau NIK (guru) diisi, otomatis dibuat virtual email.', CONTOH: 'siti.guru@budiutomo.com' },
+      { KOLOM: 'NIK_GURU', DESKRIPSI: 'Nomor Induk Kependudukan 16 digit KTP Guru untuk login tanpa email (Opsional)', CONTOH: '3201123456780001' },
       { KOLOM: 'PASSWORD', DESKRIPSI: 'Kata sandi akun, minimal 6 karakter (Wajib)', CONTOH: 'guru12345' },
       { KOLOM: 'ROLE', DESKRIPSI: 'Pilihan role: guru / siswa / kepsek / yayasan / admin (Wajib)', CONTOH: 'guru' },
       { KOLOM: 'KELAS', DESKRIPSI: 'Untuk Guru: pisahkan dengan titik koma jika > 1 kelas (misal: XI TKJ;XI TSM). Untuk Siswa: isi 1 nama kelas', CONTOH: 'XI Bisnis Digital;XI TKJ' },
       { KOLOM: 'JURUSAN', DESKRIPSI: 'Jurusan siswa (misal: Bisnis Digital, TKJ, TSM, Akuntansi)', CONTOH: 'Bisnis Digital' },
       { KOLOM: 'JENJANG', DESKRIPSI: 'Unit sekolah: SMK Budi Utomo / SMP Budi Utomo / SD Budi Utomo', CONTOH: 'SMK Budi Utomo' },
-      { KOLOM: 'MAPEL_ATAU_NISN', DESKRIPSI: 'Mata pelajaran yang diampu untuk Guru, ATAU Nomor NISN untuk Siswa', CONTOH: 'Matematika' },
+      { KOLOM: 'MAPEL_ATAU_NISN', DESKRIPSI: 'Mata pelajaran yang diampu untuk Guru, ATAU 10 Digit NISN untuk Siswa (Wajib bagi siswa tanpa email)', CONTOH: 'Matematika' },
     ];
 
     const wb = XLSX.utils.book_new();
@@ -722,6 +751,7 @@ export default function AdminDashboard() {
     wsData['!cols'] = [
       { wch: 25 },
       { wch: 28 },
+      { wch: 20 },
       { wch: 15 },
       { wch: 12 },
       { wch: 30 },
@@ -731,7 +761,7 @@ export default function AdminDashboard() {
     ];
     wsGuide['!cols'] = [
       { wch: 20 },
-      { wch: 60 },
+      { wch: 70 },
       { wch: 30 },
     ];
 
@@ -795,6 +825,7 @@ export default function AdminDashboard() {
         'Email': u.email || '-',
         'Role Akses': roleLabel,
         'Status Akun': u.is_active ? 'Aktif' : 'Nonaktif',
+        'NIK (Guru)': teacherRow?.nik || '-',
         'NISN': nisnVal,
         'Kelas / Rombel': kelasInfo,
         'Jurusan': jurusanInfo,
@@ -814,6 +845,7 @@ export default function AdminDashboard() {
       { wch: 32 }, // Email
       { wch: 20 }, // Role Akses
       { wch: 14 }, // Status Akun
+      { wch: 18 }, // NIK (Guru)
       { wch: 16 }, // NISN
       { wch: 24 }, // Kelas / Rombel
       { wch: 24 }, // Jurusan
@@ -855,7 +887,8 @@ export default function AdminDashboard() {
         const parsedRows: BulkImportRow[] = [];
         for (const row of json) {
           const full_name = String(row.NAMA_LENGKAP || row.nama_lengkap || row.Nama || row.nama || '').trim();
-          const email = String(row.EMAIL || row.email || row.Email || '').trim();
+          let email = String(row.EMAIL || row.email || row.Email || '').trim();
+          const nik = String(row.NIK_GURU || row.NIK || row.nik || row.nik_guru || '').trim();
           const password = String(row.PASSWORD || row.password || row.Password || '').trim();
           const roleRaw = String(row.ROLE || row.role || row.Role || 'siswa').toLowerCase().trim();
           const kelas = String(row.KELAS || row.kelas || row.Kelas || '').trim();
@@ -863,11 +896,27 @@ export default function AdminDashboard() {
           const jenjang = String(row.JENJANG || row.jenjang || row.Jenjang || '').trim();
           const extra = String(row.MAPEL_ATAU_NISN || row.mapel_atau_nisn || row.mapel || row.nisn || row.Extra || '').trim();
 
-          if (!full_name || !email || !password) continue;
+          if (!full_name || !password) continue;
 
           const validRole: BulkImportRow['role'] = ['siswa', 'guru', 'kepsek', 'yayasan', 'admin'].includes(roleRaw)
             ? (roleRaw as BulkImportRow['role'])
             : 'siswa';
+
+          // If email is empty, generate virtual email from NISN or NIK or Full Name
+          if (!email) {
+            if (validRole === 'siswa') {
+              const cleanNisn = extra.replace(/\D/g, '');
+              email = cleanNisn
+                ? `${cleanNisn}@siswa.budiutomo.id`
+                : `${Date.now()}_${Math.floor(Math.random() * 1000)}@siswa.budiutomo.id`;
+            } else {
+              const cleanNik = (nik || (/^\d{10,}$/.test(extra) ? extra : '')).replace(/\D/g, '');
+              const cleanName = full_name.toLowerCase().replace(/[^a-z0-9]/g, '');
+              email = cleanNik
+                ? `${cleanNik}@guru.budiutomo.id`
+                : `${cleanName || 'guru'}@guru.budiutomo.id`;
+            }
+          }
 
           parsedRows.push({
             full_name,
@@ -878,12 +927,13 @@ export default function AdminDashboard() {
             jurusan: jurusan || 'Bisnis Digital',
             jenjang: jenjang || 'SMK Budi Utomo',
             extra,
+            nik,
             status: 'pending',
           });
         }
 
         if (parsedRows.length === 0) {
-          alert('Tidak ditemukan baris data valid (pastikan kolom NAMA_LENGKAP, EMAIL, dan PASSWORD terisi).');
+          alert('Tidak ditemukan baris data valid (pastikan kolom NAMA_LENGKAP dan PASSWORD terisi).');
           return;
         }
 
@@ -925,6 +975,7 @@ export default function AdminDashboard() {
           teacherClasses: teacherClasses.length > 0 ? teacherClasses : ['SEMUA_KELAS'],
           teacherSubjects: row.extra,
           teacherPosition: 'Guru / Wali Kelas',
+          teacherNik: row.nik,
           studentJenjang: row.jenjang,
           studentKelas: row.kelas,
           studentJurusan: row.jurusan,
@@ -1330,8 +1381,16 @@ export default function AdminDashboard() {
                                 </div>
                                 <div>
                                   <div className="text-sm font-bold text-slate-900">{fullName}</div>
-                                  <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
+                                  <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5 flex-wrap">
                                     <span className="font-mono text-slate-600">{u.email}</span>
+                                    {isVirtualEmail(u.email) && (
+                                      <span
+                                        className="text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200"
+                                        title="Akun login menggunakan NISN/NIK tanpa email pribadi."
+                                      >
+                                        Tanpa Email Pribadi
+                                      </span>
+                                    )}
                                     {u.email && (
                                       <button
                                         type="button"
@@ -1382,6 +1441,28 @@ export default function AdminDashboard() {
                                   {teacherRow?.subjects && (
                                     <div className="text-[11px] text-slate-500">
                                       Mapel: <span className="font-semibold text-slate-700">{teacherRow.subjects}</span>
+                                    </div>
+                                  )}
+                                  {teacherRow?.nik && (
+                                    <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-1">
+                                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                                        <span>NIK: <b className="font-mono text-slate-800">{teacherRow.nik}</b></span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleCopyText(teacherRow.nik, `nik-${u.id}`, 'NIK Guru');
+                                          }}
+                                          className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-800 transition-all cursor-pointer inline-flex items-center justify-center shrink-0"
+                                          title="Salin NIK"
+                                        >
+                                          {copiedKey === `nik-${u.id}` ? (
+                                            <Check size={12} className="text-emerald-600" />
+                                          ) : (
+                                            <Copy size={12} />
+                                          )}
+                                        </button>
+                                      </span>
                                     </div>
                                   )}
                                 </div>
@@ -2322,17 +2403,31 @@ export default function AdminDashboard() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Email Login <span className="text-red-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Email Login {newRole === 'siswa' || newRole === 'guru' ? <span className="text-slate-400 font-normal">(Opsional)</span> : <span className="text-red-500">*</span>}
+                    </label>
+                    {(newRole === 'siswa' || newRole === 'guru') && (
+                      <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                        {newRole === 'siswa' ? 'Bisa NISN' : 'Bisa NIK'}
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="email"
-                    required
+                    required={newRole !== 'siswa' && newRole !== 'guru'}
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
                     className="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-blue-500"
-                    placeholder="nama@budiutomo.com"
+                    placeholder={newRole === 'siswa' ? 'Kosongkan jika siswa login via NISN' : newRole === 'guru' ? 'Kosongkan jika guru login via NIK' : 'nama@budiutomo.com'}
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {newRole === 'siswa'
+                      ? 'Jika kosong, sistem membuatkan email virtual otomatis dari NISN.'
+                      : newRole === 'guru'
+                      ? 'Jika kosong, sistem membuatkan email virtual otomatis dari NIK.'
+                      : 'Alamat email aktif untuk login sistem.'}
+                  </p>
                 </div>
 
                 <div>
@@ -2414,14 +2509,26 @@ export default function AdminDashboard() {
                     </>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div>
+                      <label className="block text-xs font-bold text-teal-900 mb-1">
+                        NIK Guru (16 Digit KTP)
+                      </label>
+                      <input
+                        type="text"
+                        value={newTeacherNik}
+                        onChange={(e) => setNewTeacherNik(e.target.value)}
+                        placeholder="3201123456780001"
+                        className="w-full border border-teal-300 rounded-xl px-3 py-2 text-xs bg-white font-mono"
+                      />
+                    </div>
                     <div>
                       <label className="block text-xs font-bold text-teal-900 mb-1">Mata Pelajaran Diampu</label>
                       <input
                         type="text"
                         value={newTeacherSubjects}
                         onChange={(e) => setNewTeacherSubjects(e.target.value)}
-                        placeholder="Misal: Matematika / Produktif TKJ"
+                        placeholder="Misal: Matematika / TKJ"
                         className="w-full border border-teal-300 rounded-xl px-3 py-2 text-xs bg-white"
                       />
                     </div>
@@ -2634,7 +2741,17 @@ export default function AdminDashboard() {
                     </>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-teal-900 mb-1">NIK Guru (16 Digit KTP)</label>
+                      <input
+                        type="text"
+                        value={editTeacherNik}
+                        onChange={(e) => setEditTeacherNik(e.target.value)}
+                        placeholder="3201123456780001"
+                        className="w-full border border-teal-300 rounded-xl px-3 py-2 text-xs bg-white font-mono"
+                      />
+                    </div>
                     <div>
                       <label className="block text-xs font-bold text-teal-900 mb-1">Mata Pelajaran</label>
                       <input
