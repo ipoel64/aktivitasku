@@ -32,6 +32,8 @@ import {
   CheckCircle2,
   Upload,
   MapPin,
+  Copy,
+  Check,
 } from 'lucide-react';
 import {
   loadMasterData,
@@ -119,6 +121,19 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState('all');
   const [selectedClassFilter, setSelectedClassFilter] = useState('all');
+
+  // Copy to Clipboard Indicator State
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const handleCopyText = (text: string, key: string, label: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    showToast(`✅ ${label} berhasil disalin! (${text})`);
+    setTimeout(() => {
+      setCopiedKey((curr) => (curr === key ? null : curr));
+    }, 2000);
+  };
 
   // Create User Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -726,6 +741,99 @@ export default function AdminDashboard() {
     XLSX.writeFile(wb, 'Template_Impor_Akun_Aktivitasku_7KAIH.xlsx');
   };
 
+  // ================= UNDUH SELURUH / HASIL FILTER DATA PENGGUNA KE EXCEL =================
+  const handleExportUsersToExcel = () => {
+    if (filteredUsers.length === 0) {
+      alert('Tidak ada data pengguna yang dapat diunduh sesuai filter.');
+      return;
+    }
+
+    const exportData = filteredUsers.map((u, index) => {
+      const profileObj = Array.isArray(u.user_profiles) ? u.user_profiles[0] : u.user_profiles;
+      const fullName = profileObj?.full_name || 'Tanpa Nama';
+      const profileId = profileObj?.id;
+
+      const teacherRow = profileId ? teachersMap[profileId] : null;
+      const teacherClasses = parseTeacherClasses(teacherRow);
+      const studentRow = profileId ? studentsMap[profileId] : null;
+      const studentNotes = parseStudentNotes(studentRow);
+
+      let roleLabel = u.role ? u.role.toUpperCase() : '-';
+      if (u.role === 'admin') roleLabel = 'Administrator';
+      else if (u.role === 'guru') roleLabel = 'Guru / Wali Kelas';
+      else if (u.role === 'siswa') roleLabel = 'Siswa';
+      else if (u.role === 'kepsek') roleLabel = 'Kepala Sekolah';
+      else if (u.role === 'yayasan') roleLabel = 'Yayasan';
+
+      let kelasInfo = '-';
+      let jurusanInfo = '-';
+      let jenjangInfo = '-';
+      let nisnVal = '-';
+      let mapelInfo = '-';
+
+      if (u.role === 'siswa') {
+        kelasInfo = studentNotes.kelas || '-';
+        jurusanInfo = studentNotes.jurusan || '-';
+        jenjangInfo = studentNotes.jenjang || 'SMK/SMP Budi Utomo';
+        nisnVal = studentRow?.nisn || studentNotes?.nisn || '-';
+      } else if (u.role === 'guru') {
+        kelasInfo = teacherClasses.includes('SEMUA_KELAS') ? 'Semua Kelas' : teacherClasses.join(', ') || '-';
+        mapelInfo = teacherRow?.subjects || '-';
+      }
+
+      const formattedDate = u.created_at
+        ? new Date(u.created_at).toLocaleDateString('id-ID', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })
+        : '-';
+
+      return {
+        'No': index + 1,
+        'Nama Lengkap': fullName,
+        'Email': u.email || '-',
+        'Role Akses': roleLabel,
+        'Status Akun': u.is_active ? 'Aktif' : 'Nonaktif',
+        'NISN': nisnVal,
+        'Kelas / Rombel': kelasInfo,
+        'Jurusan': jurusanInfo,
+        'Jenjang': jenjangInfo,
+        'Mata Pelajaran (Guru)': mapelInfo,
+        'No. Telepon': profileObj?.phone || studentNotes?.phone || '-',
+        'Terdaftar Pada': formattedDate,
+      };
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(exportData);
+
+    ws['!cols'] = [
+      { wch: 6 },  // No
+      { wch: 28 }, // Nama Lengkap
+      { wch: 32 }, // Email
+      { wch: 20 }, // Role Akses
+      { wch: 14 }, // Status Akun
+      { wch: 16 }, // NISN
+      { wch: 24 }, // Kelas / Rombel
+      { wch: 24 }, // Jurusan
+      { wch: 20 }, // Jenjang
+      { wch: 24 }, // Mata Pelajaran (Guru)
+      { wch: 18 }, // No. Telepon
+      { wch: 22 }, // Terdaftar Pada
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'DATA_PENGGUNA');
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const roleSuffix = selectedRole !== 'all' ? `_${selectedRole}` : '';
+    const classSuffix = selectedClassFilter !== 'all' ? `_${selectedClassFilter.replace(/[^a-zA-Z0-9]/g, '_')}` : '';
+    const fileName = `Data_Pengguna_Budi_Utomo${roleSuffix}${classSuffix}_${dateStr}.xlsx`;
+
+    XLSX.writeFile(wb, fileName);
+    showToast(`✅ Berhasil mengunduh ${exportData.length} data pengguna ke file Excel!`);
+  };
+
   const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1134,6 +1242,16 @@ export default function AdminDashboard() {
 
               <div className="flex flex-wrap items-center gap-2.5">
                 <button
+                  type="button"
+                  onClick={handleExportUsersToExcel}
+                  className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-colors cursor-pointer"
+                  title="Unduh seluruh data pengguna atau hasil filter saat ini dalam bentuk file Excel (.xlsx)"
+                >
+                  <Download size={16} />
+                  <span>Unduh Data (Excel .xlsx)</span>
+                </button>
+
+                <button
                   onClick={() => setShowImportModal(true)}
                   className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-colors cursor-pointer"
                 >
@@ -1197,6 +1315,7 @@ export default function AdminDashboard() {
                         const teacherClasses = parseTeacherClasses(teacherRow);
                         const studentRow = profileId ? studentsMap[profileId] : null;
                         const studentNotes = parseStudentNotes(studentRow);
+                        const studentNisn = studentRow?.nisn || studentNotes?.nisn || '';
 
                         return (
                           <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
@@ -1211,7 +1330,26 @@ export default function AdminDashboard() {
                                 </div>
                                 <div>
                                   <div className="text-sm font-bold text-slate-900">{fullName}</div>
-                                  <div className="text-xs text-slate-500">{u.email}</div>
+                                  <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5">
+                                    <span className="font-mono text-slate-600">{u.email}</span>
+                                    {u.email && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleCopyText(u.email, `email-${u.id}`, 'Email');
+                                        }}
+                                        className="p-1 rounded-md hover:bg-slate-200/80 text-slate-400 hover:text-slate-700 transition-all cursor-pointer inline-flex items-center justify-center shrink-0"
+                                        title="Salin Email"
+                                      >
+                                        {copiedKey === `email-${u.id}` ? (
+                                          <Check size={13} className="text-emerald-600" />
+                                        ) : (
+                                          <Copy size={13} />
+                                        )}
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </td>
@@ -1257,9 +1395,28 @@ export default function AdminDashboard() {
                                       <span className="text-xs font-medium text-slate-600">• {studentNotes.jurusan}</span>
                                     )}
                                   </div>
-                                  <div className="text-[11px] text-slate-400">
-                                    {studentNotes.jenjang || 'SMK/SMP Budi Utomo'}
-                                    {studentRow?.nisn ? ` • NISN: ${studentRow.nisn}` : ''}
+                                  <div className="text-[11px] text-slate-400 flex items-center gap-1.5 flex-wrap mt-0.5">
+                                    <span>{studentNotes.jenjang || 'SMK/SMP Budi Utomo'}</span>
+                                    {studentNisn && (
+                                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                                        <span>NISN: <b className="font-mono text-slate-800">{studentNisn}</b></span>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleCopyText(studentNisn, `nisn-${u.id}`, 'NISN');
+                                          }}
+                                          className="p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-800 transition-all cursor-pointer inline-flex items-center justify-center shrink-0"
+                                          title="Salin NISN"
+                                        >
+                                          {copiedKey === `nisn-${u.id}` ? (
+                                            <Check size={12} className="text-emerald-600" />
+                                          ) : (
+                                            <Copy size={12} />
+                                          )}
+                                        </button>
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               ) : u.role === 'kepsek' ? (
